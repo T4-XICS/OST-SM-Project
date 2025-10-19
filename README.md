@@ -11,3 +11,31 @@ Datasets are stored in Git Large File Storage. To set it up download Git LFS fro
 This project will build a system to find and explain unusual behavior (anomalies) in real-time data from Industrial Control Systems (ICS). These systems are used in places like water treatment plants, power stations, or factories. The system will use a deep learning model (an autoencoder) to learn how the system normally works and detect when something strange happens.
 The system will also learn continuously over time (called incremental learning). This helps it adapt to changes in the system, such as slow wear and tear or different working conditions. When it finds an anomaly, the system will explain which sensors caused it, so engineers can fix the problem faster.
 The system will work with any streaming data tool (like Kafka,or others). It will also include a live dashboard to show data and send alerts when needed.
+
+## Quick Start — Local demo stack & end-to-end usage
+
+This section explains how to run the local development stack and exercise the pipeline (CSV → Kafka → PySpark → InfluxDB → Grafana/Prometheus). It assumes Docker (Docker Desktop) is installed and working and that you have cloned the repository.
+
+### Repo layout (important files)
+- `deployment/` — docker-compose and provisioning (Kafka, Zookeeper, InfluxDB, Grafana, Prometheus).  
+- `data/raw/` — put SWaT (or other) sample CSVs here.  
+- `streaming/producer_csv_to_kafka.py` — (example) CSV → Kafka producer.  
+- `streaming/pyspark_consumer.py` — (example) PySpark Structured Streaming consumer that writes to InfluxDB.  
+- `model/` — place trained model checkpoints (e.g., `checkpoint.pt`) here.  
+- `docs/` — additional templates and docs.
+
+---
+
+### 0) Prerequisites
+- Docker Desktop (Windows/macOS) or Docker Engine (Linux).  
+- Python 3.8+ for producer scripts.  
+- (Optional) Apache Spark if you run `pyspark_consumer.py` via `spark-submit` locally.
+
+---
+
+### 1) Start the stack
+Run from the `deployment/` folder:
+```bash
+cd deployment
+docker compose up -d
+
