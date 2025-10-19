@@ -38,5 +38,3 @@ def calculate_f1_score(anomaly_indices, true_anomalies):
     # Calculate the F1 score
     f1 = f1_score(true_anomalies, predicted_anomalies)
     return f1, predicted_anomalies
-
-# Example usage (assuming 'anomalies' and 'true_anomalies' are defined)

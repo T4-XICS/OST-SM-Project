@@ -14,8 +14,22 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Run the main app
+### Run the app
+
+Export the correct Java version before starting the Spark apps if the default one is incorrect.
 
 ```bash
-python3 main.py
+export JAVA_HOME=`/usr/libexec/java_home -v 17`
+```
+
+#### Train
+
+```bash
+spark-submit train.py
+```
+
+#### Inference
+
+```bash
+spark-submit inference.py
 ```

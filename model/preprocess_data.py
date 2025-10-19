@@ -1,52 +1,56 @@
-import pandas as pd
-from sklearn.model_selection import train_test_split
+from pyspark.sql import functions as F
+
+def preprocess_spark(df):
+    """
+    df: Spark DataFrame (streaming or static)
+    Returns: cleaned Spark DataFrame (ready for PyTorch sequence creation)
+    """
+
+    # drop the first and last column if it's non-numeric (e.g., timestamp)
+    first_col = df.columns[0]
+    if dict(df.dtypes)[first_col] not in ['double', 'float', 'int', 'bigint']:
+        df = df.drop(first_col)
+    
+    last_col = df.columns[-1]
+    if dict(df.dtypes)[last_col] not in ['double', 'float', 'int', 'bigint']:
+        df = df.drop(last_col)
+
+    # Convert all columns to numeric
+    for c in df.columns:
+        df = df.withColumn(c, F.col(c).cast("double"))
+
+    # Fill or interpolate missing values
+    df = df.fillna(0)
+
+    # Compute variance per column
+    var_df = df.select([F.variance(F.col(c)).alias(c) for c in df.columns]).collect()[0].asDict()
+    low_var_cols = [c for c, v in var_df.items() if v is not None and v < 1e-6]
+
+    if low_var_cols:
+        print(f"Columns with very low variance: {low_var_cols}")
+        #df = df.drop(*low_var_cols)
+
+    return df
+
 from torch.utils.data import DataLoader
+from sklearn.model_selection import train_test_split
+import numpy as np
 
-def preprocess_data(train, test, batch_size=32, sequence_length=30):
-    if train.iloc[0].dtype == 'object':
-        train = train[1:].copy()
-        test = test[1:].copy()
+def create_dataloader(pdf, single=True, batch_size=32, sequence_length=30):
+    df = pdf.toPandas()
+    data = df.to_numpy(dtype=np.float32)
 
-    # convert all columns to numeric
-    train = train.apply(pd.to_numeric, errors='coerce')
-    test = test.apply(pd.to_numeric, errors='coerce')
+    # build sliding windows
+    sequences = [
+        data[i:i + sequence_length]
+        for i in range(len(data) - sequence_length + 1)
+    ]
 
-    # interpolate/fill NaNs after conversion if necessary
-    train.interpolate(inplace=True)
-    train.bfill(inplace=True)
-    test.interpolate(inplace=True)
-    test.bfill(inplace=True)
-
-    # calculate variance, crop columns with variance close to zero.
-    variance_threshold = 1e-6
-    variances = train.var()
-    low_variance_cols = variances[variances < variance_threshold].index
-
-    print(f"Columns with very low variance: {list(low_variance_cols)}")
-
-    # drop low variance columns
-    train_filtered = train.drop(columns=low_variance_cols)
-    test_filtered = test.drop(columns=low_variance_cols)
-
-    print(f"Original number of features: {train.shape[1]}")
-    print(f"Number of features after removing low variance columns: {train_filtered.shape[1]}")
-
-    # egenerate the tensors and dataloaders with the filtered data
-    train_tensor = train_filtered.values
-    test_tensor = test_filtered.values
-
-    sequences = []
-    for i in range(train_tensor.shape[0] - sequence_length + 1):
-        sequences.append(train_tensor[i:i + sequence_length])
+    if single:
+        return DataLoader(sequences, batch_size=batch_size, shuffle=False)
 
     train_data, val_data = train_test_split(sequences, test_size=0.3, random_state=42, shuffle=False) # 70% train, 30% temp
-
-    test_sequences = []
-    for i in range(test_tensor.shape[0] - sequence_length + 1):
-        test_sequences.append(test_tensor[i:i + sequence_length])
-
-    train_loader = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(dataset=val_data, batch_size=batch_size, shuffle=False)
-    test_loader = DataLoader(dataset=test_sequences, batch_size=batch_size, shuffle=False)
-
-    return train_loader, val_loader, test_loader
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
+    return train_loader, val_loader
+     
