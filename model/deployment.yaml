@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyspark-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pyspark-app
+  template:
+    metadata:
+      labels:
+        app: pyspark-app
+    spec:
+      containers:
+      - name: pyspark-app
+        image: henrikberenyi/pyspark-app:latest
+        imagePullPolicy: Always
+        resources:
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+        env:
+        - name: SPARK_MASTER
+          value: "local[*]"  # or point to a Spark master URL
