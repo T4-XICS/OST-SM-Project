@@ -19,7 +19,7 @@ def main():
     sequence_length = 30
     train_loader, val_loader, test_loader = preprocess_data(train, test, batch_size=32, sequence_length=sequence_length)
 
-    input_dim = train_loader.dataset[0].shape[2]
+    input_dim = train_loader.dataset[0].shape[1]
     hidden_dim = 128
     latent_dim = 32
     num_layers = 1
@@ -37,9 +37,9 @@ def main():
     # Train
     torch.cuda.empty_cache()
 
-    train_model(model, train_loader, val_loader, optimizer, loss_function, scheduler, num_epochs=100, device=device)
+    train_model(model, train_loader, val_loader, optimizer, loss_function, scheduler, num_epochs=1, device=device)
 
-    save_model(model, "lstm_vae_swat.pth", input_dim, latent_dim, hidden_dim, sequence_length)
+    save_model(model, "lstm_vae_swat", input_dim, latent_dim, hidden_dim, sequence_length)
 
 
     # Evaluate
@@ -54,3 +54,6 @@ def main():
     print(classification_report(true_anomalies, predicted_anomalies))
 
     print(confusion_matrix(true_anomalies, predicted_anomalies))
+
+if __name__ == "__main__":
+    main()
