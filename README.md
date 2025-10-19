@@ -18,11 +18,8 @@ This section explains how to run the local development stack and exercise the pi
 
 ### Repo layout (important files)
 - `deployment/` — docker-compose and provisioning (Kafka, Zookeeper, InfluxDB, Grafana, Prometheus).  
-- `data/raw/` — put SWaT (or other) sample CSVs here.  
-- `streaming/producer_csv_to_kafka.py` — (example) CSV → Kafka producer.  
-- `streaming/pyspark_consumer.py` — (example) PySpark Structured Streaming consumer that writes to InfluxDB.  
+- `datasets/swat/` — put SWaT (or other) sample CSVs here.
 - `model/` — place trained model checkpoints (e.g., `checkpoint.pt`) here.  
-- `docs/` — additional templates and docs.
 
 ---
 
