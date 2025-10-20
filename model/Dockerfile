@@ -8,13 +8,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Verify
 RUN java -version && python3 --version && pip3 --version
 
+# Copy csv datasets
+COPY datasets/ datasets/
+
 # Copy requirements and install
-COPY requirements.txt .
+COPY model/requirements.txt .
 RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
 
+COPY model/weights/ model/weights/
+
 # Copy your PySpark app
-ADD *.py .
+ADD model/*.py .
 
 # Set entrypoint
-ENTRYPOINT ["python3", "inference.py"]
-
+ENTRYPOINT ["python3"]

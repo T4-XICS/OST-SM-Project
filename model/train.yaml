@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyspark-train
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pyspark-train
+  template:
+    metadata:
+      labels:
+        app: pyspark-train
+    spec:
+      containers:
+      - name: pyspark-train
+        image: henrikberenyi/pyspark-app:latest
+        imagePullPolicy: Always
+        args: ["train.py"]
+        resources:
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+        env:
+        - name: SPARK_MASTER
+          value: "local[*]"  # or point to a Spark master URL

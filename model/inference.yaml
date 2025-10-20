@@ -1,21 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: pyspark-app
+  name: pyspark-inference
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: pyspark-app
+      app: pyspark-inference
   template:
     metadata:
       labels:
-        app: pyspark-app
+        app: pyspark-inference
     spec:
       containers:
-      - name: pyspark-app
+      - name: pyspark-inference
         image: henrikberenyi/pyspark-app:latest
         imagePullPolicy: Always
+        args: ["inference.py"]
         resources:
           limits:
             memory: "1Gi"
