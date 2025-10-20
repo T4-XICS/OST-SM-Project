@@ -28,6 +28,7 @@ from network import LSTMVAE, loss_function, train_model, save_model
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Using device:", device)
 
 def train(batch_df, batch_id):
     train_loader, val_loader = create_dataloader(batch_df, single=False, batch_size=32, sequence_length=30)

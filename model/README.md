@@ -32,7 +32,7 @@ pip install -r requirements.txt
 Export the correct Java version before starting the Spark apps if the default one is incorrect.
 
 ```bash
-export JAVA_HOME=`/usr/libexec/java_home -v 17
+export JAVA_HOME=`/usr/libexec/java_home -v 17`
 ```
 
 After that, the train and inference apps can be run by using `spark-submit`.

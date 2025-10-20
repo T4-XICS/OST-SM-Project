@@ -40,6 +40,8 @@ def create_dataloader(pdf, single=True, batch_size=32, sequence_length=30):
     df = pdf.toPandas()
     data = df.to_numpy(dtype=np.float32)
 
+    print(f"Total data points: {data.shape[0]}, Features: {data.shape[1]}")
+
     # build sliding windows
     sequences = [
         data[i:i + sequence_length]

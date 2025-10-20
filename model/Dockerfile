@@ -1,11 +1,9 @@
-FROM ubuntu:24.04
+FROM pytorch/pytorch:2.9.0-cuda13.0-cudnn9-runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.12 python3-pip openjdk-17-jdk ca-certificates && \
-    ln -sf /usr/bin/python3.12 /usr/bin/python3 && \
+    openjdk-17-jdk ca-certificates && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Verify
 RUN java -version && python3 --version && pip3 --version
 
 # Copy csv datasets
@@ -19,6 +17,8 @@ COPY model/weights/ model/weights/
 
 # Copy your PySpark app
 ADD model/*.py .
+
+ENV PYTHONUNBUFFERED=1
 
 # Set entrypoint
 ENTRYPOINT ["python3"]
