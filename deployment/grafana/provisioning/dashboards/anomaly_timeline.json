@@ -1,0 +1,37 @@
+{
+  "id": null,
+  "uid": "anomaly-timeline",
+  "title": "Anomaly Timeline",
+  "tags": ["ics","anomaly"],
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Anomaly Score (S1)",
+      "gridPos": { "x": 0, "y": 0, "w": 16, "h": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"ics\") |> range(start: -15m) |> filter(fn: (r) => r._measurement == \"anomalies\" and r.sensor_id == \"S1\" and r._field == \"anomaly_score\") |> aggregateWindow(every: 10s, fn: max)",
+          "datasource": { "type": "influxdb", "uid": "" }
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Recent Anomalies",
+      "gridPos": { "x": 0, "y": 8, "w": 16, "h": 6 },
+      "targets": [
+        {
+          "refId": "B",
+          "query": "from(bucket: \"ics\") |> range(start: -1h) |> filter(fn: (r) => r._measurement == \"anomalies\" and r._field == \"anomaly_score\") |> sort(columns:[\"_time\"], desc:true) |> limit(n:20)",
+          "datasource": { "type": "influxdb", "uid": "" }
+        }
+      ]
+    }
+  ],
+  "templating": { "list": [] }
+}
