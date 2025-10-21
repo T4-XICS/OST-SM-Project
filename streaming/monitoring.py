@@ -34,3 +34,18 @@ class StreamMonitor:
         self.throughput_thread = threading.Thread(target=self._calculate_throughput)
         self.throughput_thread.daemon = True
         self.throughput_thread.start()
+    
+    def record_processed_message(self, processing_time):
+        self.messages_processed.inc()
+        self.processing_latency.observe(processing_time)
+    
+    def record_dropped_message(self):
+        self.dropped_messages.inc()
+    
+    def _calculate_throughput(self):
+        while True:
+            current_count = self.messages_processed._value.get()
+            messages_in_interval = current_count - self.last_count
+            self.throughput.set(messages_in_interval / 10.0)
+            self.last_count = current_count
+            time.sleep(10)
