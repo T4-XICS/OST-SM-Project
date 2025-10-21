@@ -77,6 +77,19 @@ services:
     networks:
       - icsnet
 
+  producer:
+    build:
+      context: ../producer
+    container_name: producer
+    depends_on:
+      - kafka
+    restart: on-failure
+    volumes:
+      - ../datasets/swat/SWaT_Dataset_Normal_v0_1.csv:/app/SWaT_Dataset_Normal_v0_1.csv
+    networks:
+      - icsnet
+    entrypoint: ["sh", "-c", "sleep 10 && python send_csv_to_kafka.py"]
+
 networks:
   icsnet:
     driver: bridge
