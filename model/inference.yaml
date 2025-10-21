@@ -19,8 +19,9 @@ spec:
         args: ["inference.py"]
         resources:
           limits:
-            memory: "1Gi"
+            memory: "5Gi"
             cpu: "500m"
+            nvidia.com/gpu: 1
           requests:
             memory: "512Mi"
             cpu: "250m"
