@@ -35,7 +35,7 @@ Run from the `deployment/` folder:
 ```bash
 cd deployment
 docker compose up -d
-
+```
 
 ### 2) What runs where (default URLs & credentials)
 - Grafana (UI): `http://localhost:3000`
