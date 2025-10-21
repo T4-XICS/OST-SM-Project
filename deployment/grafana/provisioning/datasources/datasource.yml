@@ -10,7 +10,7 @@ datasources:
       version: Flux
       organization: ics-org
     secureJsonData:
-      token: admintoken123
+      token: CbmTCtaa8dzGe5-MHu6wHNTfjhCnDxwqTDFrLVsCzOIv4x5qRYW_t9C8Ai8G-lOwGHI0gKIXSFfWf5_gN7-Y-w==
 
   - name: Prometheus
     type: prometheus

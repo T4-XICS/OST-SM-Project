@@ -4,7 +4,8 @@ services:
     image: confluentinc/cp-zookeeper:7.4.0
     container_name: zookeeper
     environment:
-      - ALLOW_ANONYMOUS_LOGIN=yes
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
     networks:
@@ -18,13 +19,12 @@ services:
     depends_on:
       - zookeeper
     environment:
-      - KAFKA_BROKER_ID=1
-      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
-      - ALLOW_PLAINTEXT_LISTENER=yes
-      # internal listener for containers
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
-      # advertised to other containers
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
     ports:
       - "9092:9092"
     networks:
@@ -76,6 +76,28 @@ services:
       - "9090:9090"
     networks:
       - icsnet
+
+  producer:
+    build:
+      context: ../producer
+    container_name: producer
+    depends_on:
+      - kafka
+    restart: on-failure
+    volumes:
+      - ../datasets/swat/SWaT_Dataset_Normal_v0_1.csv:/app/SWaT_Dataset_Normal_v0_1.csv
+    networks:
+      - icsnet
+
+  spark-consumer:
+    build:
+      context: ../consumer
+    container_name: spark-consumer
+    depends_on:
+      - kafka
+    networks:
+      - icsnet
+
 
 networks:
   icsnet:
