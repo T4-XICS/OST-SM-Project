@@ -1,4 +1,4 @@
-#version: "3.8"
+# deployment/docker-compose.yml
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
@@ -11,7 +11,8 @@ services:
     networks:
       - icsnet
     volumes:
-      - zookeeper_data:/bitnami
+      
+      - zookeeper_data:/var/lib/zookeeper
 
   kafka:
     image: confluentinc/cp-kafka:7.4.0
@@ -21,61 +22,22 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+
+      
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     ports:
-      - "9092:9092"
+      - "9092:9092"   
+      - "29092:29092"  
     networks:
       - icsnet
     volumes:
-      - kafka_data:/bitnami
-
-  influxdb:
-    image: influxdb:latest
-    container_name: influxdb
-    environment:
-      - INFLUXDB_INIT_MODE=setup
-      - INFLUXDB_INIT_USERNAME=admin
-      - INFLUXDB_INIT_PASSWORD=adminpass
-      - INFLUXDB_INIT_ORG=ics-org
-      - INFLUXDB_INIT_BUCKET=ics
-      - INFLUXDB_INIT_ADMIN_TOKEN=admintoken123
-    ports:
-      - "8086:8086"
-    networks:
-      - icsnet
-    volumes:
-      - influxdb_data:/var/lib/influxdb2
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-      # make Grafana load provisioning files
-      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
-    ports:
-      - "3000:3000"
-    networks:
-      - icsnet
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    ports:
-      - "9090:9090"
-    networks:
-      - icsnet
+      
+      - kafka_data:/var/lib/kafka/data
 
   producer:
     build:
@@ -85,19 +47,64 @@ services:
       - kafka
     restart: on-failure
     volumes:
+      
       - ../datasets/swat/SWaT_Dataset_Normal_v0_1.csv:/app/SWaT_Dataset_Normal_v0_1.csv
     networks:
       - icsnet
 
-  spark-consumer:
-    build:
-      context: ../consumer
-    container_name: spark-consumer
-    depends_on:
-      - kafka
-    networks:
-      - icsnet
+  
+  # influxdb:
+  #   image: influxdb:latest
+  #   container_name: influxdb
+  #   environment:
+  #     - INFLUXDB_INIT_MODE=setup
+  #     - INFLUXDB_INIT_USERNAME=admin
+  #     - INFLUXDB_INIT_PASSWORD=adminpass
+  #     - INFLUXDB_INIT_ORG=ics-org
+  #     - INFLUXDB_INIT_BUCKET=ics
+  #     - INFLUXDB_INIT_ADMIN_TOKEN=admintoken123
+  #   ports:
+  #     - "8086:8086"
+  #   networks:
+  #     - icsnet
+  #   volumes:
+  #     - influxdb_data:/var/lib/influxdb2
 
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: grafana
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=admin
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #     - GF_USERS_ALLOW_SIGN_UP=false
+  #     - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - icsnet
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #     - ./grafana/provisioning:/etc/grafana/provisioning:ro  
+
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: prometheus
+  #   volumes:
+  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro   
+  #     - prometheus_data:/prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   networks:
+  #     - icsnet
+
+  # spark-consumer:
+  #   build:
+  #     context: ../consumer   
+  #   container_name: spark-consumer
+  #   depends_on:
+  #     - kafka
+  #   networks:
+  #     - icsnet
 
 networks:
   icsnet:
@@ -106,6 +113,6 @@ networks:
 volumes:
   zookeeper_data:
   kafka_data:
-  influxdb_data:
-  grafana_data:
-  prometheus_data:
+  # influxdb_data:
+  # grafana_data:
+  # prometheus_data:
