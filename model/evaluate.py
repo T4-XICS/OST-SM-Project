@@ -19,7 +19,6 @@ def evaluate_lstm(model, test_loader, device, percentile_threshold=90):
                 batch_scores.append(loss.item())
             anomaly_scores.extend(batch_scores)  # Append scores for all sequences in the batch
 
-
     # Calculate the threshold based on the specified percentile
     threshold = np.percentile(anomaly_scores, percentile_threshold)
 
