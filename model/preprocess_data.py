@@ -36,18 +36,47 @@ from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 import numpy as np
 
-def create_dataloader(pdf, single=True, batch_size=32, sequence_length=30):
-    df = pdf.toPandas()
-    data = df.to_numpy(dtype=np.float32)
+# module-level buffer to accumulate rows across streaming micro-batches
+_stream_buffer = None
 
-    print(f"Total data points: {data.shape[0]}, Features: {data.shape[1]}")
+def create_dataloader(pdf, single=True, batch_size=32, sequence_length=30):
+    global _stream_buffer
+
+    df = pdf.toPandas()
+    if df.shape[0] == 0:
+        print("create_dataloader: received empty dataframe")
+        return None
+
+    data = df.to_numpy(dtype=np.float32)
+    print(f"Total data points in this batch: {data.shape[0]}, Features: {data.shape[1]}")
+
+    # init buffer with correct n_features if first call
+    if _stream_buffer is None:
+        _stream_buffer = np.empty((0, data.shape[1]), dtype=np.float32)
+
+    # concatenate previous leftover rows with current batch
+    concat = np.vstack([_stream_buffer, data]) if _stream_buffer.size else data
 
     # build sliding windows
     sequences = [
-        data[i:i + sequence_length]
-        for i in range(len(data) - sequence_length + 1)
+        concat[i:i + sequence_length]
+        for i in range(len(concat) - sequence_length + 1)
     ]
 
+    print(f"Built {len(sequences)} sequences from concat length {len(concat)}")
+
+    # keep last (sequence_length - 1) rows as buffer for next batch
+    if len(concat) >= sequence_length - 1:
+        _stream_buffer = concat[-(sequence_length - 1):].copy()
+    else:
+        _stream_buffer = concat.copy()
+
+    if len(sequences) == 0:
+        # not enough data yet to form a single sequence
+        print("Not enough rows to form a sequence yet; waiting for more data.")
+        return None
+
+    # convert to list (DataLoader can consume list of ndarrays)
     if single:
         return DataLoader(sequences, batch_size=batch_size, shuffle=False)
 
@@ -55,4 +84,4 @@ def create_dataloader(pdf, single=True, batch_size=32, sequence_length=30):
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
     return train_loader, val_loader
-     
+

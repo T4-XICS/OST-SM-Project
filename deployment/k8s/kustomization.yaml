@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ics
+resources:
+  - namespace.yaml
+  - kafka.yaml
+  - influxdb.yaml
+  - grafana-config.yaml
+  - grafana.yaml
+  - prometheus-config.yaml
+  - prometheus.yaml
+  - producer.yaml
+  - spark-consumer.yaml

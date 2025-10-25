@@ -1,36 +1,25 @@
 #version: "3.8"
 services:
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.4.0
-    container_name: zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
-    networks:
-      - icsnet
-    volumes:
-      - zookeeper_data:/bitnami
-
   kafka:
-    image: confluentinc/cp-kafka:7.4.0
+    image: bitnamilegacy/kafka:3.5.1
     container_name: kafka
-    depends_on:
-      - zookeeper
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # run broker and controller in the same process (single-node KRaft)
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+      # useful logging on startup
+      - ALLOW_PLAINTEXT_LISTENER=yes
     ports:
       - "9092:9092"
     networks:
       - icsnet
     volumes:
-      - kafka_data:/bitnami
+      - kafka_data:/bitnami/kafka
 
   influxdb:
     image: influxdb:latest
@@ -79,33 +68,30 @@ services:
 
   producer:
     build:
-      context: ../producer
+      context: ../
+      dockerfile: producer/Dockerfile
     container_name: producer
     depends_on:
       - kafka
     restart: on-failure
-    volumes:
-      - ../datasets/swat/SWaT_Dataset_Normal_v0_1.csv:/app/SWaT_Dataset_Normal_v0_1.csv
     networks:
       - icsnet
 
   spark-consumer:
     build:
-      context: ../consumer
+      context: ../model
     container_name: spark-consumer
+    command: ["inference.py"]
     depends_on:
-      - kafka
+      - producer
+    # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
+    gpus: all
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     networks:
       - icsnet
-
 
 networks:
   icsnet:
     driver: bridge
-
-volumes:
-  zookeeper_data:
-  kafka_data:
-  influxdb_data:
-  grafana_data:
-  prometheus_data:
