@@ -92,6 +92,29 @@ services:
     networks:
       - icsnet
 
+  spark-train:
+    build:
+      context: ../model
+    container_name: spark-train
+    command: ["train.py"]
+    depends_on:
+      - producer
+    # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
+    gpus: all
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    networks:
+      - icsnet
+    volumes:
+      - ../model/weights:/weights
+
 networks:
   icsnet:
     driver: bridge
+
+volumes:
+  kafka_data:
+  influxdb_data:
+  grafana_data:
+  prometheus_data:

@@ -11,6 +11,7 @@
 - `prometheus.yaml`: Prometheus `Deployment` + `Service` + `PVC` (`prometheus-data`).
 - `producer.yaml`: Producer `Deployment` mounting a `PVC` at `/app` to provide the CSV file at the same path as docker-compose.
 - `spark-consumer.yaml`: Spark + PyTorch consumer `Deployment` requesting 1 GPU and running `inference.py`.
+- `spark-train.yaml`: Spark + PyTorch consumer `Deployment` requesting 1 GPU and running `train.py`.
 - `kustomization.yaml`: For easy apply/delete of the whole stack.
 
 ## Images
@@ -26,7 +27,7 @@ The docker-compose file builds two images from source. For Kubernetes, build and
     ```
   - `producer.yaml` uses this image and no longer mounts a PVC.
 
-- Spark consumer: build from `model/` → set `image: <your_name>/model:latest` in `spark-consumer.yaml`.
+- Spark consumer: build from `model/` → set `image: <your_name>/model:latest` in `spark-consumer.yaml` and `spark-train.yaml`.
 
 ## Start the stack
 
@@ -53,7 +54,7 @@ kubectl -n ics port-forward svc/prometheus 9090:9090
 
 ## Notes
 
-- The `spark-consumer` requests `nvidia.com/gpu: 1`. Ensure the NVIDIA device plugin is installed on your cluster and a GPU node is available.
+- The `spark-consumer` and `spark-train` requests `nvidia.com/gpu: 1`. Ensure the NVIDIA device plugin is installed on your cluster and a GPU node is available.
 - Init containers in `producer` and `spark-consumer` wait for `kafka:9092` to be reachable before starting.
 - The Kafka `Service` name is `kafka` to match the bootstrap server URL used in code/config (`kafka:9092`).
 - Prometheus config currently contains a placeholder static target for Kafka. Point it to real `/metrics` endpoints as they are added.

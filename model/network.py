@@ -123,6 +123,8 @@ def save_model(model, name, input_dim, latent_dim, hidden_dim, sequence_length):
     }
     torch.save(model_state, name + '.pth')
 
+    print(f"Model saved to {name}.pth")
+
 def load_model(path, device='cpu'):
     checkpoint = torch.load(path, map_location=device)
     model = LSTMVAE(input_dim=checkpoint['input_dim'],

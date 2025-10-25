@@ -74,7 +74,9 @@ def create_dataloader(pdf, single=True, batch_size=32, sequence_length=30):
     if len(sequences) == 0:
         # not enough data yet to form a single sequence
         print("Not enough rows to form a sequence yet; waiting for more data.")
-        return None
+        if single:
+            return None
+        return None, None
 
     # convert to list (DataLoader can consume list of ndarrays)
     if single:

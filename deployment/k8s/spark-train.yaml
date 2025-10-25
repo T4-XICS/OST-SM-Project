@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-train
+  namespace: ics
+  labels:
+    app: spark-train
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-train
+  template:
+    metadata:
+      labels:
+        app: spark-train
+    spec:
+      initContainers:
+        - name: wait-for-kafka
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -zv kafka 9092; do echo 'waiting for kafka'; sleep 1; done"]
+      containers:
+        - name: spark-train
+          image: henrikberenyi/model:latest
+          imagePullPolicy: Always
+          args: ["train.py"]
+          env:
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: compute,utility
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - name: model-weights
+              mountPath: /weights
+      volumes:
+        - name: model-weights
+          hostPath:
+            path: /mnt/c/Users/beren/Desktop/OST-SM-Project/model/weights
+            type: DirectoryOrCreate
+

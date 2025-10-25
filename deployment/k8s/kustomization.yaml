@@ -11,3 +11,4 @@ resources:
   - prometheus.yaml
   - producer.yaml
   - spark-consumer.yaml
+  - spark-train.yaml
