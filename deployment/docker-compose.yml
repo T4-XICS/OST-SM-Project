@@ -91,6 +91,8 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     networks:
       - icsnet
+    ports:
+      - "4040:4040"  # Spark UI
 
   spark-train:
     build:
@@ -106,6 +108,8 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     networks:
       - icsnet
+    ports:
+      - "4041:4040"  # Spark UI
     volumes:
       - ../model/weights:/weights
 
