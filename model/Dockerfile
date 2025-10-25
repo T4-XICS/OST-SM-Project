@@ -27,4 +27,4 @@ ADD *.py .
 ENV PYTHONUNBUFFERED=1
 
 ENTRYPOINT ["/opt/spark/bin/spark-submit", "--master", "local[*]", \
-     "--jars", "/opt/spark/jars/spark-sql-kafka-0-10_2.12-3.5.1.jar,/opt/spark/jars/kafka-clients-3.5.1.jar,/opt/spark/jars/commons-pool2-2.11.1.jar"]
+     "--jars", "/opt/spark/jars/spark-sql-kafka-0-10_2.12-3.5.1.jar,/opt/spark/jars/spark-token-provider-kafka-0-10_2.12-3.5.1.jar,/opt/spark/jars/kafka-clients-3.5.1.jar,/opt/spark/jars/commons-pool2-2.11.1.jar"]
