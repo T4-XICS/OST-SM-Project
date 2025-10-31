@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: ics
+  labels:
+    app: grafana
+    grafana_component: datasources
+data:
+  datasource.yml: |
+    apiVersion: 1
+
+    datasources:
+      - name: InfluxDB
+        type: influxdb
+        access: proxy
+        url: http://influxdb:8086
+        isDefault: true
+        jsonData:
+          version: Flux
+          organization: ics-org
+        secureJsonData:
+          token: admintoken123
+
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: ics
+  labels:
+    app: grafana
+    grafana_component: dashboards
+data:
+  dashboard.yml: |
+    apiVersion: 1
+
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        options:
+          path: /etc/grafana/provisioning/dashboards
+  sensor_overview.json: |
+    {
+      "id": null,
+      "uid": "sensor-overview",
+      "title": "Sensor Overview",
+      "tags": ["ics","overview"],
+      "timezone": "browser",
+      "schemaVersion": 36,
+      "version": 1,
+      "refresh": "5s",
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "Sensor value (S1)",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "refId": "A",
+              "query": "from(bucket: \"ics\") |> range(start: -5m) |> filter(fn: (r) => r._measurement == \"sensor_stats\" and r.sensor_id == \"S1\" and r._field == \"value\") |> aggregateWindow(every: 10s, fn: mean)",
+              "datasource": { "type": "influxdb", "uid": "" }
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Rolling mean (S1)",
+          "gridPos": { "x": 12, "y": 0, "w": 4, "h": 5 },
+          "targets": [
+            {
+              "refId": "B",
+              "query": "from(bucket: \"ics\") |> range(start: -5m) |> filter(fn: (r) => r._measurement == \"sensor_stats\" and r.sensor_id == \"S1\" and r._field == \"rolling_mean\") |> aggregateWindow(every: 10s, fn: last)",
+              "datasource": { "type": "influxdb", "uid": "" }
+            }
+          ]
+        }
+      ],
+      "templating": {
+        "list": [
+          {
+            "name": "sensor_id",
+            "type": "query",
+            "label": "Sensor",
+            "query": "import \"influxdata/influxdb/v1\" \n v1.tagValues(bucket: \"ics\", tag: \"sensor_id\")",
+            "datasource": { "type": "influxdb", "uid": "" }
+          }
+        ]
+      }
+    }
+  anomaly_timeline.json: |
+    {
+      "id": null,
+      "uid": "anomaly-timeline",
+      "title": "Anomaly Timeline",
+      "tags": ["ics","anomaly"],
+      "timezone": "browser",
+      "schemaVersion": 36,
+      "version": 1,
+      "refresh": "5s",
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "Anomaly Score (S1)",
+          "gridPos": { "x": 0, "y": 0, "w": 16, "h": 8 },
+          "targets": [
+            {
+              "refId": "A",
+              "query": "from(bucket: \"ics\") |> range(start: -15m) |> filter(fn: (r) => r._measurement == \"anomalies\" and r.sensor_id == \"S1\" and r._field == \"anomaly_score\") |> aggregateWindow(every: 10s, fn: max)",
+              "datasource": { "type": "influxdb", "uid": "" }
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "title": "Recent Anomalies",
+          "gridPos": { "x": 0, "y": 8, "w": 16, "h": 6 },
+          "targets": [
+            {
+              "refId": "B",
+              "query": "from(bucket: \"ics\") |> range(start: -1h) |> filter(fn: (r) => r._measurement == \"anomalies\" and r._field == \"anomaly_score\") |> sort(columns:[\"_time\"], desc:true) |> limit(n:20)",
+              "datasource": { "type": "influxdb", "uid": "" }
+            }
+          ]
+        }
+      ],
+      "templating": { "list": [] }
+    }

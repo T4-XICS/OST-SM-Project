@@ -5,7 +5,7 @@ import time
 
 TOPIC_NAME = "ics-sensor-data"
 KAFKA_SERVER = "kafka:9092"
-CSV_FILE_PATH = "SWaT_Dataset_Normal_v0_1.csv"
+CSV_FILE_PATH = "/app/SWaT_Dataset_Normal_v0_1.csv"
 
 def stream_csv_to_kafka():
     producer = KafkaProducer(
@@ -13,7 +13,8 @@ def stream_csv_to_kafka():
         value_serializer=lambda v: json.dumps(v).encode("utf-8")
     )
 
-    with open(CSV_FILE_PATH, "r") as file:
+    # open with utf-8-sig to remove BOM from header (if present)
+    with open(CSV_FILE_PATH, "r", encoding="utf-8-sig", newline='') as file:
         reader = csv.DictReader(file)
         print(f"Streaming {CSV_FILE_PATH} to Kafka topic '{TOPIC_NAME}'...")
         for row in reader:

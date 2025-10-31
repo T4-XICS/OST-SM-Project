@@ -35,4 +35,18 @@ Run from the `deployment/` folder:
 ```bash
 cd deployment
 docker compose up -d
+```
+
+### 2) What runs where (default URLs & credentials)
+- Grafana (UI): `http://localhost:3000`
+  - Username: `admin`
+  - Password: `admin2`
+- InfluxDB (UI): `http://localhost:8086`
+  - Username: `admin`
+  - Password: `adminpass`
+  - Default bucket: `ics`
+  - Default org: `ics-org`
+- Prometheus (UI): `http://localhost:9090`
+- Kafka (UI): `http://localhost:9092`
+
 

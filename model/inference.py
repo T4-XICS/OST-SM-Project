@@ -1,4 +1,6 @@
 from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType
+from pyspark.sql.functions import col, from_json, trim, when
 import torch
 from preprocess_data import preprocess_spark, create_dataloader
 
@@ -10,34 +12,74 @@ spark = (
     .getOrCreate()
 )
 
-# Simulated input directory for CSV files
-input_path = "./datasets/swat/attack"
-schema = "Timestamp STRING, FIT101 DOUBLE,LIT101 DOUBLE, MV101 DOUBLE,P101 DOUBLE,P102 DOUBLE, AIT201 DOUBLE,AIT202 DOUBLE,AIT203 DOUBLE,FIT201 DOUBLE, MV201 DOUBLE, P201 DOUBLE, P202 DOUBLE,P203 DOUBLE, P204 DOUBLE,P205 DOUBLE,P206 DOUBLE,DPIT301 DOUBLE,FIT301 DOUBLE,LIT301 DOUBLE,MV301 DOUBLE,MV302 DOUBLE, MV303 DOUBLE,MV304 DOUBLE,P301 DOUBLE,P302 DOUBLE,AIT401 DOUBLE,AIT402 DOUBLE,FIT401 DOUBLE,LIT401 DOUBLE,P401 DOUBLE,P402 DOUBLE,P403 DOUBLE,P404 DOUBLE,UV401 DOUBLE,AIT501 DOUBLE,AIT502 DOUBLE,AIT503 DOUBLE,AIT504 DOUBLE,FIT501 DOUBLE,FIT502 DOUBLE,FIT503 DOUBLE,FIT504 DOUBLE,P501 DOUBLE,P502 DOUBLE, PIT501 DOUBLE,PIT502 DOUBLE,PIT503 DOUBLE,FIT601 DOUBLE,P601 DOUBLE,P602 DOUBLE,P603 DOUBLE,Normal_Attack STRING"
+# replace the previous typed schema with an all-string schema, then cast later
+all_fields = [
+    "Timestamp","FIT101","LIT101","MV101","P101","P102","AIT201","AIT202","AIT203",
+    "FIT201","MV201","P201","P202","P203","P204","P205","P206","DPIT301","FIT301",
+    "LIT301","MV301","MV302","MV303","MV304","P301","P302","AIT401","AIT402","FIT401",
+    "LIT401","P401","P402","P403","P404","UV401","AIT501","AIT502","AIT503","AIT504",
+    "FIT501","FIT502","FIT503","FIT504","P501","P502","PIT501","PIT502","PIT503",
+    "FIT601","P601","P602","P603","Normal_Attack"
+]
 
-# Read streaming CSV (each new file simulates new producer data)
+schema = StructType([StructField(f, StringType(), True) for f in all_fields])
+numeric_cols = [c for c in all_fields if c not in ("Timestamp", "Normal_Attack")]
+
 stream_df = (
     spark.readStream
-    .option("header", True)
-    .option("ignoreLeadingWhiteSpace", True)
-    .option("ignoreTrailingWhiteSpace", True)
-    .schema(schema)
-    .csv(input_path)
+    .format("kafka")
+    .option("kafka.bootstrap.servers", "kafka:9092")
+    .option("subscribe", "ics-sensor-data")
+    .option("startingOffsets", "latest")
+    .option("failOnDataLoss", "false")
+    .load()
 )
-# replace with actual Kafka source in production
-# .readStream
-# .format("kafka")
-# .option("kafka.bootstrap.servers", "<broker>:9092")
-# .option("subscribe", "<topic>")
-# .load()
 
 from network import LSTMVAE, load_model
 from evaluate import evaluate_lstm
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
 def run_eval(batch_df, batch_id):
-    dataloader = create_dataloader(batch_df, batch_size=32, sequence_length=30)
+    if batch_df.count() == 0:
+        print(f"\n--- Batch {batch_id} is empty. Skipping evaluation. ---")
+        return
 
-    model = load_model("model/weights/lstm_vae_swat.pth", device=device)
+    print(f"\n--- Batch {batch_id} RAW SAMPLE (value column) ---")
+    batch_df.select(col("value").cast("string").alias("raw_value")).show(5, False)
+
+    # parse JSON into string columns
+    cleaned = batch_df.select(from_json(col("value").cast("string"), schema).alias("data")).select("data.*")
+
+    # trim and cast numeric string columns -> DoubleType, treat empty strings as null
+    parsed = cleaned
+    for c in numeric_cols:
+        parsed = parsed.withColumn(c, when(trim(col(c)) == "", None).otherwise(col(c).cast(DoubleType())))
+
+    # trim timestamp and label
+    parsed = parsed.withColumn("Timestamp", trim(col("Timestamp")))\
+                   .withColumn("Normal_Attack", trim(col("Normal_Attack")))
+
+    print(f"\n--- Batch {batch_id} PARSED SAMPLE ---")
+    parsed.show(5, False)
+
+    total = parsed.count()
+    print(f"Parsed rows: {total}")
+    for f in parsed.columns:
+        nulls = parsed.filter(col(f).isNull()).count()
+        print(f"{f}: nulls={nulls}")
+
+    # only then preprocess and create dataloader
+    df_pre = preprocess_spark(parsed)
+    dataloader = create_dataloader(df_pre, batch_size=32, sequence_length=30)
+
+    if dataloader is None:
+        print(f"Batch {batch_id}: not enough data to run inference yet. Skipping.")
+        return
+
+    df_pre.show(5, False)
+
+    model = load_model("weights/lstm_vae_swat.pth", device=device)
     model.eval()
 
     # Evaluate
@@ -49,7 +91,7 @@ def run_eval(batch_df, batch_id):
 query = (
     stream_df
     .writeStream
-    .foreachBatch(lambda df, _: run_eval(preprocess_spark(df), _))
+    .foreachBatch(lambda df, batch_id: run_eval(df, batch_id))
     #.option("checkpointLocation", "checkpoints/mock_consumer")
     .start()
 )
