@@ -1,6 +1,6 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, TimestampType, StringType, ArrayType, FloatType
 
 # Create Spark session
 spark = SparkSession \
