@@ -3,7 +3,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from influxdb_client import InfluxDBClient
 import pandas as pd
-from typing import Optional, Dict, List
+from typing import Optional
 
 # --- Configuration ---
 # NOTE: You have TWO InfluxDB instances running:
