@@ -96,7 +96,7 @@ In another terminal, create your database (bucket):
 ```bash
 influxdb3 create token --admin 
 ```
-The output will be a **secret-token** which you sould store somewhere.
+The output will be a **secret-token** which you should store somewhere.
 
 ```bash
 influxdb3 create database test --token secret-token
