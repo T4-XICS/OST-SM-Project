@@ -57,7 +57,7 @@ def main():
         health = influx_client.ping()
         print(f"InfluxDB connection test successful: {health}")
     except Exception as e:
-        print(f"⚠️ InfluxDB connection test failed: {e}")
+        print(f"InfluxDB connection test failed: {e}")
         raise
         
     write_api = influx_client.write_api(write_options=SYNCHRONOUS)
