@@ -8,9 +8,9 @@ datasources:
     isDefault: true
     jsonData:
       version: Flux
-      organization: ics-org
+      organization: ucs
     secureJsonData:
-      token: CbmTCtaa8dzGe5-MHu6wHNTfjhCnDxwqTDFrLVsCzOIv4x5qRYW_t9C8Ai8G-lOwGHI0gKIXSFfWf5_gN7-Y-w==
+      token: QxzNbxYC3mh15AOYK5e1rweiLzHsS9WqlCDvZ9VTRdTcvVO3gbp2FexttgNzwecf06BdA5On8SSPu6Ky1UBDXQ==
 
   - name: Prometheus
     type: prometheus
