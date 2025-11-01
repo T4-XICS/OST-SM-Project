@@ -25,18 +25,24 @@ services:
     image: influxdb:latest
     container_name: influxdb
     environment:
-      - INFLUXDB_INIT_MODE=setup
-      - INFLUXDB_INIT_USERNAME=admin
-      - INFLUXDB_INIT_PASSWORD=adminpass
-      - INFLUXDB_INIT_ORG=ics-org
-      - INFLUXDB_INIT_BUCKET=ics
-      - INFLUXDB_INIT_ADMIN_TOKEN=admintoken123
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpass
+      - DOCKER_INFLUXDB_INIT_ORG=ucs
+      - DOCKER_INFLUXDB_INIT_BUCKET=swat_db
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_ADMIN_TOKEN}
     ports:
       - "8086:8086"
     networks:
       - icsnet
     volumes:
       - influxdb_data:/var/lib/influxdb2
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   grafana:
     image: grafana/grafana:latest
@@ -73,6 +79,20 @@ services:
     container_name: producer
     depends_on:
       - kafka
+
+      
+  kafka-to-influx:
+    build:
+      context: ../
+      dockerfile: consumer/Dockerfile
+    container_name: kafka-to-influx
+    depends_on:
+      kafka:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+      producer:
+        condition: service_started
     restart: on-failure
     networks:
       - icsnet

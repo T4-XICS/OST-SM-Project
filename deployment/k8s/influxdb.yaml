@@ -52,11 +52,14 @@ spec:
             - name: INFLUXDB_INIT_PASSWORD
               value: adminpass
             - name: INFLUXDB_INIT_ORG
-              value: ics-org
+              value: ucs
             - name: INFLUXDB_INIT_BUCKET
-              value: ics
+              value: swat_db
             - name: INFLUXDB_INIT_ADMIN_TOKEN
-              value: admintoken123
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-admin-token
+                  key: admin-token
           ports:
             - containerPort: 8086
           volumeMounts:
