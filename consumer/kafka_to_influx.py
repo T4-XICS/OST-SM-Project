@@ -89,8 +89,8 @@ def main():
                     try:
                         numeric_value = float(value)
                         point.field(key, numeric_value)
-                    except (ValueError, TypeError):
-                        pass
+                    except (ValueError, TypeError) as e:
+                        print(f"Skipping non-numeric value for key '{key}': {value} ({e})")
             
             # Parse timestamp
             if timestamp_str:
