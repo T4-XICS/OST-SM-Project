@@ -9,7 +9,9 @@ KAFKA_BOOTSTRAP = "localhost:9092"
 KAFKA_TOPIC = "logs"
 
 INFLUX_URL = "http://localhost:8181"
-INFLUX_TOKEN = "apiv3_S4tahb4bYVgM5bAGO7GYAGaQZkIZKXHMAO_JvJ0zHDMe9x4aF4YS73wgG3uGRPy4k9fMNr6GJ3N5es6e1VgP_g"
+INFLUX_TOKEN = os.environ.get("INFLUX_TOKEN")
+if INFLUX_TOKEN is None:
+    raise RuntimeError("INFLUX_TOKEN environment variable not set")
 INFLUX_ORG = "ik"
 INFLUX_BUCKET = "test"
 
