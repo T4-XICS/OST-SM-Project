@@ -2,7 +2,6 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col, to_timestamp
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 from influxdb_client_3 import InfluxDBClient3, InfluxDBError, Point, WritePrecision, WriteOptions, write_client_options
-import os
 
 # --- Mock Config for now --- 
 # TODO: move them to a separate config file
