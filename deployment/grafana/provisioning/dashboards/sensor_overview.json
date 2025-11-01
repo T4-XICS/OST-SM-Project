@@ -1,0 +1,47 @@
+{
+  "id": null,
+  "uid": "sensor-overview",
+  "title": "Sensor Overview",
+  "tags": ["ics","overview"],
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "5s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Sensor value (S1)",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"ics\") |> range(start: -5m) |> filter(fn: (r) => r._measurement == \"sensor_stats\" and r.sensor_id == \"S1\" and r._field == \"value\") |> aggregateWindow(every: 10s, fn: mean)",
+          "datasource": { "type": "influxdb", "uid": "" }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Rolling mean (S1)",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 5 },
+      "targets": [
+        {
+          "refId": "B",
+          "query": "from(bucket: \"ics\") |> range(start: -5m) |> filter(fn: (r) => r._measurement == \"sensor_stats\" and r.sensor_id == \"S1\" and r._field == \"rolling_mean\") |> aggregateWindow(every: 10s, fn: last)",
+          "datasource": { "type": "influxdb", "uid": "" }
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "sensor_id",
+        "type": "query",
+        "label": "Sensor",
+        "query": "import \"influxdata/influxdb/v1\" \n v1.tagValues(bucket: \"ics\", tag: \"sensor_id\")",
+        "datasource": { "type": "influxdb", "uid": "" }
+      }
+    ]
+  }
+}
