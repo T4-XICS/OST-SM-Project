@@ -56,7 +56,10 @@ spec:
             - name: INFLUXDB_INIT_BUCKET
               value: swat_db
             - name: INFLUXDB_INIT_ADMIN_TOKEN
-              value: QxzNbxYC3mh15AOYK5e1rweiLzHsS9WqlCDvZ9VTRdTcvVO3gbp2FexttgNzwecf06BdA5On8SSPu6Ky1UBDXQ==
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb-admin-token
+                  key: admin-token
           ports:
             - containerPort: 8086
           volumeMounts:
