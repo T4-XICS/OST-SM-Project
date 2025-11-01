@@ -23,4 +23,4 @@ CMD python /app/kafka_to_influx.py \
     --influx-url http://influxdb:8086 \
     --influx-org ucs \
     --influx-bucket swat_db \
-    --token QxzNbxYC3mh15AOYK5e1rweiLzHsS9WqlCDvZ9VTRdTcvVO3gbp2FexttgNzwecf06BdA5On8SSPu6Ky1UBDXQ==
+    --token $INFLUX_TOKEN
