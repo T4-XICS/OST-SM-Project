@@ -44,3 +44,13 @@ jobs:
           tags: |
             henrikberenyi/producer:latest
             henrikberenyi/producer:${{ github.sha }}
+
+      - name: Build and push producer image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: consumer/Dockerfile
+          push: true
+          tags: |
+            henrikberenyi/kafka-to-influx:latest
+            henrikberenyi/kafka-to-influx:${{ github.sha }}
