@@ -45,7 +45,7 @@ jobs:
             henrikberenyi/producer:latest
             henrikberenyi/producer:${{ github.sha }}
 
-      - name: Build and push producer image
+      - name: Build and push kafka-to-influx image
         uses: docker/build-push-action@v4
         with:
           context: .
