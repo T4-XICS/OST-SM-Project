@@ -24,7 +24,8 @@ def stream_csv_to_kafka():
         value_serializer=lambda v: json.dumps(v).encode("utf-8")
     )
 
-    # open with utf-8-sig to remove BOM from header (if present)
+    # Start Prometheus metrics server
+    start_http_server(8000)
     with open(CSV_FILE_PATH, "r", encoding="utf-8-sig", newline='') as file:
         reader = csv.DictReader(file)
         print(f"Streaming {CSV_FILE_PATH} to Kafka topic '{TOPIC_NAME}'...")

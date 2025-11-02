@@ -5,7 +5,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install deps
-RUN pip install --no-cache-dir kafka-python
+RUN pip install --no-cache-dir kafka-python prometheus_client
 
 # Copy producer code
 COPY producer/send_csv_to_kafka.py /app/send_csv_to_kafka.py
