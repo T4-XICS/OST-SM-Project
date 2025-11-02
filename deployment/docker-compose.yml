@@ -20,6 +20,13 @@ services:
       - icsnet
     volumes:
       - kafka_data:/bitnami/kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 
   influxdb:
     image: influxdb:latest
@@ -30,7 +37,7 @@ services:
       - DOCKER_INFLUXDB_INIT_PASSWORD=adminpass
       - DOCKER_INFLUXDB_INIT_ORG=ucs
       - DOCKER_INFLUXDB_INIT_BUCKET=swat_db
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_ADMIN_TOKEN}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=QxzNbxYC3mh15AOYK5e1rweiLzHsS9WqlCDvZ9VTRdTcvVO3gbp2FexttgNzwecf06BdA5On8SSPu6Ky1UBDXQ==
     ports:
       - "8086:8086"
     networks:
@@ -79,6 +86,9 @@ services:
     container_name: producer
     depends_on:
       - kafka
+    restart: on-failure
+    networks:
+      - icsnet
 
       
   kafka-to-influx:
