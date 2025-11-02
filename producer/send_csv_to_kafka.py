@@ -25,14 +25,12 @@ def stream_csv_to_kafka():
     )
 
     # Start Prometheus metrics server
-    start_http_server(8000)
     with open(CSV_FILE_PATH, "r", encoding="utf-8-sig", newline='') as file:
         reader = csv.DictReader(file)
         print(f"Streaming {CSV_FILE_PATH} to Kafka topic '{TOPIC_NAME}'...")
         for row in reader:
             start_time = time.time()
             producer.send(TOPIC_NAME, row)
-            producer.flush()
             duration = time.time() - start_time
 
             # Update Prometheus metrics
@@ -45,4 +43,5 @@ def stream_csv_to_kafka():
     producer.flush()
 
 if __name__ == "__main__":
+    start_http_server(8000)
     stream_csv_to_kafka()
