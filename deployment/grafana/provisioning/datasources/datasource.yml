@@ -10,7 +10,7 @@ datasources:
       version: Flux
       organization: ucs
     secureJsonData:
-      token: ${INFLUXDB_TOKEN}
+      token: admintoken123
 
   - name: Prometheus
     type: prometheus
