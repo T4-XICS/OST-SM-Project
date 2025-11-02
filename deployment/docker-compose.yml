@@ -37,7 +37,7 @@ services:
       - DOCKER_INFLUXDB_INIT_PASSWORD=adminpass
       - DOCKER_INFLUXDB_INIT_ORG=ucs
       - DOCKER_INFLUXDB_INIT_BUCKET=swat_db
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=QxzNbxYC3mh15AOYK5e1rweiLzHsS9WqlCDvZ9VTRdTcvVO3gbp2FexttgNzwecf06BdA5On8SSPu6Ky1UBDXQ==
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=admintoken123
     ports:
       - "8086:8086"
     networks:
