@@ -89,6 +89,8 @@ services:
     restart: on-failure
     networks:
       - icsnet
+    ports:
+      - "8000:8000"
 
       
   kafka-to-influx:
