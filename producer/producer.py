@@ -9,8 +9,8 @@ TOPIC = "ics-stream"
 BOOTSTRAP_SERVERS = "localhost:9092"
 
 # CSV file path
-CSV_PATH = Path(__file__).parent.parent / "datasets" / "swat" / "SWaT_Dataset_Attack_v0 1.csv"
-
+# Changed: corrected path to attack/SWaT_Dataset_Attack_v0_1.csv (underscore + subfolder)
+CSV_PATH = Path(__file__).parent.parent / "datasets" / "swat" / "attack" / "SWaT_Dataset_Attack_v0_1.csv"
 
 def run_producer():
     producer = KafkaProducer(
