@@ -45,23 +45,36 @@ spec:
           image: influxdb:latest
           imagePullPolicy: IfNotPresent
           env:
-            - name: INFLUXDB_INIT_MODE
+            - name: DOCKER_INFLUXDB_INIT_MODE
               value: setup
-            - name: INFLUXDB_INIT_USERNAME
+            - name: DOCKER_INFLUXDB_INIT_USERNAME
               value: admin
-            - name: INFLUXDB_INIT_PASSWORD
+            - name: DOCKER_INFLUXDB_INIT_PASSWORD
               value: adminpass
-            - name: INFLUXDB_INIT_ORG
+            - name: DOCKER_INFLUXDB_INIT_ORG
               value: ucs
-            - name: INFLUXDB_INIT_BUCKET
+            - name: DOCKER_INFLUXDB_INIT_BUCKET
               value: swat_db
-            - name: INFLUXDB_INIT_ADMIN_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: influxdb-admin-token
-                  key: admin-token
+            - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+              value: admintoken123
           ports:
             - containerPort: 8086
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8086
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8086
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           volumeMounts:
             - name: data
               mountPath: /var/lib/influxdb2
