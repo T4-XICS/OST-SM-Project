@@ -97,6 +97,8 @@ services:
     build:
       context: ../
       dockerfile: consumer/Dockerfile
+    environment:
+      - INFLUX_TOKEN=admintoken123
     container_name: kafka-to-influx
     depends_on:
       kafka:

@@ -10,5 +10,6 @@ resources:
   - prometheus-config.yaml
   - prometheus.yaml
   - producer.yaml
+  - kafka-to-influx.yaml
   - spark-consumer.yaml
   - spark-train.yaml
