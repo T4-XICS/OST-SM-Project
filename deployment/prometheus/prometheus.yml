@@ -6,7 +6,6 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  # placeholder: scrape application metrics endpoints (add your services here)
   - job_name: 'kafka-producer'
     static_configs:
       - targets: ['producer:8000']
