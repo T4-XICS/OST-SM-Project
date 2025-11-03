@@ -45,9 +45,9 @@ docker compose up -d --build
   - Username: `admin`
   - Password: `adminpass`
  
-  ### In case of something is not working:
-  - If one or more of the applications are not working correctly, for example showing something else than to the others, you should head to the Docker Desktop - Volumes and delete the problematic application volume.
-  - There might be some leftover information in the volumes saved, and a `docker compose up -d --build` will not rebuild it properly
+### In case of something is not working:
+- If one or more of the applications are not working correctly, for example showing something else than to the others, you should head to the Docker Desktop - Volumes and delete the problematic application volume.
+- There might be some leftover information in the volumes saved, and a `docker compose up -d --build` will not rebuild it properly
   - Default bucket: `ics`
   - Default org: `ics-org`
 - Prometheus (UI): `http://localhost:9090`
