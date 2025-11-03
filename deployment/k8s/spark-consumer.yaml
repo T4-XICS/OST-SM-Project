@@ -14,6 +14,8 @@ spec:
     metadata:
       labels:
         app: spark-consumer
+      annotations:
+        promtail_scrape: "true"
     spec:
       initContainers:
         - name: wait-for-kafka
@@ -29,6 +31,10 @@ spec:
               value: all
             - name: NVIDIA_DRIVER_CAPABILITIES
               value: compute,utility
+            - name: SERVICE_NAME
+              value: spark-consumer
+            - name: LOG_LEVEL
+              value: INFO
           resources:
             limits:
               nvidia.com/gpu: 1

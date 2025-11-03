@@ -18,7 +18,7 @@ data:
         isDefault: true
         jsonData:
           version: Flux
-          organization: ics-org
+          organization: ucs
         secureJsonData:
           token: admintoken123
 
@@ -26,6 +26,12 @@ data:
         type: prometheus
         access: proxy
         url: http://prometheus:9090
+        isDefault: false
+      
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki:3100
         isDefault: false
 ---
 apiVersion: v1
@@ -134,4 +140,66 @@ data:
         }
       ],
       "templating": { "list": [] }
+    }
+  logs.json: |
+    {
+      "id": null,
+      "uid": "logs-line-by-line",
+      "title": "Model Logs",
+      "tags": ["logs", "loki"],
+      "timezone": "browser",
+      "schemaVersion": 36,
+      "version": 4,
+      "refresh": "5s",
+      "templating": {
+        "list": [
+          {
+            "name": "datasource",
+            "type": "datasource",
+            "label": "Datasource",
+            "query": "loki",
+            "current": { "selected": true }
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "type": "logs",
+          "title": "spark-consumer",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 18 },
+          "options": {
+            "dedupStrategy": "none",
+            "showLabels": true,
+            "showTime": true,
+            "wrapLogMessage": true
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "{app=\"spark-consumer\"}",
+              "datasource": { "type": "loki", "uid": "$datasource" }
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "logs",
+          "title": "spark-train",
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 18 },
+          "options": {
+            "dedupStrategy": "none",
+            "showLabels": true,
+            "showTime": true,
+            "wrapLogMessage": true
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "{app=\"spark-train\"}",
+              "datasource": { "type": "loki", "uid": "$datasource" }
+            }
+          ]
+        }
+      ]
     }

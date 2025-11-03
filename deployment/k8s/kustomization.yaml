@@ -13,3 +13,5 @@ resources:
   - kafka-to-influx.yaml
   - spark-consumer.yaml
   - spark-train.yaml
+  - loki.yaml
+  - promtail.yaml
