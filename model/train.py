@@ -1,8 +1,18 @@
+import logging
+import os
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 from pyspark.sql.functions import col, from_json, trim, when
 import torch
 from preprocess_data import preprocess_spark, create_dataloader
+
+# Configure logging to stdout for Promtail/Loki
+SERVICE_NAME = os.getenv("SERVICE_NAME", "spark-train")
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format=f"%(asctime)s %(levelname)s %(name)s app={SERVICE_NAME} %(message)s",
+)
+logger = logging.getLogger(SERVICE_NAME)
 
 spark = (
     SparkSession.builder
@@ -39,14 +49,14 @@ from network import LSTMVAE, loss_function, train_model, save_model
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("Using device:", device)
+logger.info(f"Using device: {device}")
 
 def train(batch_df, batch_id):
     if batch_df.count() == 0:
-        print(f"\n--- Batch {batch_id} is empty. Skipping evaluation. ---")
+        logger.info(f"Batch {batch_id} is empty. Skipping training.")
         return
     
-    print(f"\n--- Batch {batch_id} RAW SAMPLE (value column) ---")
+    logger.info(f"Batch {batch_id} RAW SAMPLE (value column)")
     batch_df.select(col("value").cast("string").alias("raw_value")).show(5, False)
 
     # parse JSON into string columns
@@ -61,21 +71,21 @@ def train(batch_df, batch_id):
     parsed = parsed.withColumn("Timestamp", trim(col("Timestamp")))\
                    .withColumn("Normal_Attack", trim(col("Normal_Attack")))
 
-    print(f"\n--- Batch {batch_id} PARSED SAMPLE ---")
+    logger.info(f"Batch {batch_id} PARSED SAMPLE")
     parsed.show(5, False)
 
     total = parsed.count()
-    print(f"Parsed rows: {total}")
+    logger.info(f"Parsed rows: {total}")
     for f in parsed.columns:
         nulls = parsed.filter(col(f).isNull()).count()
-        print(f"{f}: nulls={nulls}")
+        logger.info(f"{f}: nulls={nulls}")
 
     # only then preprocess and create dataloader
     df_pre = preprocess_spark(parsed)
     train_loader, val_loader = create_dataloader(df_pre, single=False, batch_size=32, sequence_length=30)
 
     if train_loader is None or val_loader is None:
-        print(f"Batch {batch_id}: not enough data to run inference yet. Skipping.")
+        logger.info(f"Batch {batch_id}: not enough data to run training yet. Skipping.")
         return
 
     df_pre.show(5, False)
@@ -98,7 +108,7 @@ def train(batch_df, batch_id):
     # Train
     torch.cuda.empty_cache()
 
-    print("Training on batch:", batch_id)
+    logger.info(f"Training on batch: {batch_id}")
 
     train_model(model, train_loader, val_loader, optimizer, loss_function, scheduler, num_epochs=1, device=device)
 
