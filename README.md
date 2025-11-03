@@ -44,13 +44,15 @@ docker compose up -d --build
 - InfluxDB (UI): `http://localhost:8086`
   - Username: `admin`
   - Password: `adminpass`
+  - Default bucket: `swat_db`
+  - Default org: `ucs`
+  - Admin token: `admintoken123`
+- Prometheus (UI): `http://localhost:9090`
+- Kafka (UI): `http://localhost:9092`
  
 ### In case of something is not working:
 - If one or more of the applications are not working correctly, for example showing something else than to the others, you should head to the Docker Desktop - Volumes and delete the problematic application volume.
 - There might be some leftover information in the volumes saved, and a `docker compose up -d --build` will not rebuild it properly
-  - Default bucket: `ics`
-  - Default org: `ics-org`
-- Prometheus (UI): `http://localhost:9090`
-- Kafka (UI): `http://localhost:9092`
+  
 
 
