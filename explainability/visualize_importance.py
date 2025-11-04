@@ -1,4 +1,12 @@
-"""Simple plotting utilities for explanation outputs."""
-def barplot_importance(feature_names, importances):
-    """TODO: implement matplotlib bar chart for feature importances."""
-    pass
+# -*- coding: utf-8 -*-
+# Visualization module for feature importance
+import matplotlib.pyplot as plt
+
+def plot_feature_importance(features, importances, title="Feature Importance"):
+    plt.figure(figsize=(8, 4))
+    plt.barh(features, importances, color="skyblue")
+    plt.xlabel("Importance")
+    plt.ylabel("Features")
+    plt.title(title)
+    plt.tight_layout()
+    plt.show()

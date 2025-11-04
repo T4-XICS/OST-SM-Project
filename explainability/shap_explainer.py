@@ -1,9 +1,12 @@
-"""SHAP-based explanations for anomaly scores."""
-import numpy as np
+# -*- coding: utf-8 -*-
+# SHAP Explainer Module
+import shap
 
-def explain_shap(model, X_batch, feature_names):
-    """Return per-feature contribution for each sample.
-    TODO: integrate shap.TreeExplainer / KernelExplainer depending on model.
-    """
-    contrib = np.zeros_like(X_batch, dtype=float)
-    return {"contrib": contrib, "features": feature_names}
+class ShapExplainer:
+    def __init__(self, model):
+        self.model = model
+        self.explainer = shap.Explainer(model)
+
+    def explain_instance(self, instance):
+        shap_values = self.explainer(instance)
+        return shap_values.values.tolist()
