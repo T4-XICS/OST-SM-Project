@@ -120,7 +120,8 @@
   "refresh": "5s",
   "schemaVersion": 42,
   "tags": [
-    "swat_db"
+    "swat_db",
+    "stage_P1"
   ],
   "templating": {
     "list": [

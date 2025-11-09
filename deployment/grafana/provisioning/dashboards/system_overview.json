@@ -397,7 +397,8 @@
   "refresh": "5s",
   "schemaVersion": 42,
   "tags": [
-    "swat_db"
+    "swat_db",
+    "overview"
   ],
   "templating": {
     "list": []
