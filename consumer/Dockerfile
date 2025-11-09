@@ -7,10 +7,11 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get install -y procps curl && \
     rm -rf /var/lib/apt/lists/* && \
-    pip install --no-cache-dir kafka-python influxdb-client pandas
+    pip install --no-cache-dir kafka-python influxdb-client pandas prometheus-api-client
 
-# Copy consumer script
+# Copy consumer scripts
 COPY consumer/kafka_to_influx.py /app/kafka_to_influx.py
+COPY consumer/prometheus_to_influx.py /app/prometheus_to_influx.py
 
 # Add debugging script
 RUN echo '#!/bin/bash\necho "KAFKA_SERVER=kafka:9092"\necho "INFLUX_URL=http://influxdb:8086"\necho "Current processes:"\nps aux\necho "\nPython processes:"\nps aux | grep python\necho "\nNetwork connectivity:"\necho "Kafka:"\ncurl -v telnet://kafka:9092 2>&1 | grep "Connected"\necho "InfluxDB:"\ncurl -v http://influxdb:8086/health 2>&1 | grep -E "Connected|status"\n' > /app/debug.sh && \
