@@ -4,3 +4,4 @@
    ```bash
    cd deployment && docker compose up -d kafka
    docker compose ps
+Added initial plan for explainability and adaptive learning (WIP)
