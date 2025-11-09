@@ -18,13 +18,12 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 3,
+  "id": 2,
   "links": [],
   "panels": [
     {
       "datasource": {
-        "type": "influxdb",
-        "uid": "P951FEA4DE68E13C5"
+        "type": "influxdb"
       },
       "fieldConfig": {
         "defaults": {
@@ -80,40 +79,15 @@
             ]
           }
         },
-        "overrides": [
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "MV304 Normal"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": true,
-                  "viz": true
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 10,
-        "w": 24,
+        "w": 15,
         "x": 0,
         "y": 0
       },
-      "id": 3,
+      "id": 1,
       "options": {
         "legend": {
           "calcs": [],
@@ -130,11 +104,15 @@
       "pluginVersion": "12.2.0",
       "targets": [
         {
-          "query": "from(bucket: \"swat_db\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r[\"_measurement\"] == \"swat_sensor_data\")\r\n  |> filter(fn: (r) => r[\"status\"] == \"Normal\")\r\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\r\n  |> yield(name: \"mean\")",
+          "datasource": {
+            "type": "influxdb",
+            "uid": ""
+          },
+          "query": "from(bucket:\"swat_db\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn:(r) => r._field == \"LIT101\")\r\n  |> aggregateWindow(every:v.windowPeriod, fn: mean, createEmpty:false)\r\n  |> yield()\r\n",
           "refId": "A"
         }
       ],
-      "title": "average sensor readings during normal operation",
+      "title": "Level trend",
       "type": "timeseries"
     }
   ],
@@ -143,18 +121,34 @@
   "schemaVersion": 42,
   "tags": [
     "swat_db",
-    "anomaly"
+    "stage_P1"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "datasource": {
+          "type": "influxdb",
+          "uid": ""
+        },
+        "label": "Sensor",
+        "name": "sensor_id",
+        "options": [],
+        "query": "import \"influxdata/influxdb/v1\" \n v1.tagValues(bucket: \"swat_db\", tag: \"sensor_id\")",
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "2015-12-22T16:00:00.000Z",
-    "to": "2015-12-22T19:00:00.000Z"
+    "to": "2015-12-22T18:00:00.000Z"
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Anomaly Timeline",
-  "uid": "anomaly-timeline",
-  "version": 1
+  "title": "Intake & Storage",
+  "uid": "sensor-overview",
+  "version": 2
 }
