@@ -66,8 +66,28 @@ def stream_csv_to_kafka():
             MESSAGES_SENT.inc()
             PROCESSING_TIME.observe(duration)
 
-            print(f"Sent: {row} | Took: {duration:.4f}s")
-            time.sleep(0.3)  # simulate 3Hz ICS sensor feed
+            # Track producer data rate
+            recent_times.append(time.time())
+            if len(recent_times) >= 2:
+                rate = (len(recent_times) - 1) / (recent_times[-1] - recent_times[0])
+                DATA_RATE.set(rate)
+
+            # Attack detection (depends on SWaT dataset column name)
+            label = row.get("Normal_Attack") or row.get("Label") or row.get("Attack") or ""
+            is_attack = str(label).strip().lower() == "attack"
+            CURRENT_ROW_ATTACK_FLAG.set(1 if is_attack else 0)
+            if is_attack:
+                ATTACK_ROWS_SENT.inc()
+                attack_type = row.get("Attack Type", "unknown")
+                ATTACK_BY_TYPE.labels(type=attack_type).inc()
+
+
+            status = "ATTACK" if is_attack else "NORMAL"
+            rate_display = f"{rate:.2f}/s" if rate is not None else "N/A"
+            print(f"[{i:05}] {status} | LIT101={row.get('LIT101', 'N/A')} | Duration={duration:.4f}s | Rate={rate_display}")
+
+            # Simulate real-time ICS stream
+            time.sleep(0.3)
 
     producer.flush()
     print("Finished streaming CSV to Kafka.")
