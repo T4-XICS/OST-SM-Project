@@ -6,8 +6,9 @@ import time
 import os
 from collections import deque
 
+# Kafka configuration
 TOPIC_NAME = "ics-sensor-data"
-KAFKA_SERVER = "kafka:9092"  # Use "kafka:9092" when running in Docker
+KAFKA_SERVER = "kafka:9092"  # When running in Docker
 
 # Detect correct CSV path (works both locally and in Docker)
 if os.path.exists("/app/SWaT_Dataset_Normal_v0_1.csv"):
@@ -81,7 +82,7 @@ def stream_csv_to_kafka():
                 attack_type = row.get("Attack Type", "unknown")
                 ATTACK_BY_TYPE.labels(type=attack_type).inc()
 
-                
+
             # Water level
             for tank_tag in ["LIT101", "LIT401", "LIT301"]:
                 try:
@@ -114,6 +115,37 @@ def stream_csv_to_kafka():
 
                     continue
 
+
+            # Pump activity status
+            for pump_tag in ["P101", "P102"]:
+                try:
+                    pump_on = int(float(row.get(pump_tag, 0)))
+                    PUMP_ACTIVITY_01.labels(pump=pump_tag).set(pump_on)
+                except Exception:
+
+                    continue
+
+            for pump_tag in [f"P20{i}" for i in range(1, 7)]:
+                try:
+                    status = int(float(row.get(pump_tag, 0)))
+                    PUMP_P2_ACTIVITY.labels(pump=pump_tag).set(status)
+                except Exception:
+                    continue
+
+            for pump_tag in [f"P40{i}" for i in range(1, 5)]:
+                try:
+                    status = int(float(row.get(pump_tag, 0)))
+                    PUMP_P4_ACTIVITY.labels(pump=pump_tag).set(status)
+                except Exception:
+                    continue
+
+            for valve_tag in ["MV101", "MV201", "MV301"]:
+                try:
+                    valve_open = int(float(row.get(valve_tag, 0)))
+                    VALVE_STATUS.labels(valve=valve_tag).set(valve_open)
+                except:
+                    continue
+
             status = "ATTACK" if is_attack else "NORMAL"
             rate_display = f"{rate:.2f}/s" if rate is not None else "N/A"
             print(f"[{i:05}] {status} | LIT101={row.get('LIT101', 'N/A')} | Duration={duration:.4f}s | Rate={rate_display}")
@@ -130,3 +162,4 @@ if __name__ == "__main__":
     start_http_server(8000)
     # Begin Kafka streaming
     stream_csv_to_kafka()
+
