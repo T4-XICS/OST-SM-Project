@@ -81,6 +81,38 @@ def stream_csv_to_kafka():
                 attack_type = row.get("Attack Type", "unknown")
                 ATTACK_BY_TYPE.labels(type=attack_type).inc()
 
+                
+            # Water level
+            for tank_tag in ["LIT101", "LIT401", "LIT301"]:
+                try:
+                    level = float(row.get(tank_tag, 0))
+                    TANK_LEVEL.labels(tank=tank_tag).set(level)
+                    if level < 400 or level > 800:
+                        SENSOR_OUTLIER_DETECTED.labels(tag=tank_tag).inc()
+                except:
+
+                    continue
+
+
+            # Flow rates for stage 5
+            for flow_tag in [f"FIT50{i}" for i in range(1, 5)]:
+                try:
+                    rate = float(row.get(flow_tag, 0))
+                    FLOW_P5_RATE.labels(flow_tag=flow_tag).set(rate)
+                except Exception:
+
+                    continue
+
+
+            # Flow rate spikes
+            for flow_tag in ["FIT101", "FIT201", "FIT301", "FIT401", "FIT501", "FIT601"]:
+                try:
+                    val = float(row.get(flow_tag, 0))
+                    if val > 1.5:  # arbitrary threshold for spike
+                        HIGH_FLOW_DETECTED.labels(flow_tag=flow_tag).inc()
+                except Exception:
+
+                    continue
 
             status = "ATTACK" if is_attack else "NORMAL"
             rate_display = f"{rate:.2f}/s" if rate is not None else "N/A"
