@@ -109,7 +109,7 @@ def stream_csv_to_kafka():
             for flow_tag in ["FIT101", "FIT201", "FIT301", "FIT401", "FIT501", "FIT601"]:
                 try:
                     val = float(row.get(flow_tag, 0))
-                    if val > 1.5:  # arbitrary threshold for spike
+                    if val > 2.5:  # arbitrary threshold for spike
                         HIGH_FLOW_DETECTED.labels(flow_tag=flow_tag).inc()
                 except Exception:
 
