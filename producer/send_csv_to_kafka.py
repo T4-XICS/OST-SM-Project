@@ -40,17 +40,25 @@ DATA_RATE = Gauge('kafka_data_rows_per_second', 'Producer data rate in rows per 
 
 
 def stream_csv_to_kafka():
+    """Stream SWaT dataset rows to Kafka while exposing Prometheus metrics."""
+    print(f"Starting Kafka producer for topic '{TOPIC_NAME}'")
+    print(f"Prometheus metrics available at http://localhost:8000/metrics")
+
     producer = KafkaProducer(
         bootstrap_servers=KAFKA_SERVER,
         value_serializer=lambda v: json.dumps(v).encode("utf-8")
     )
 
-    # Start Prometheus metrics server
+    recent_times = deque(maxlen=10)  # Track timestamps for data rate calculation
+
     with open(CSV_FILE_PATH, "r", encoding="utf-8-sig", newline='') as file:
         reader = csv.DictReader(file)
         print(f"Streaming {CSV_FILE_PATH} to Kafka topic '{TOPIC_NAME}'...")
-        for row in reader:
+        rate = None
+        for i, row in enumerate(reader, start=1):
             start_time = time.time()
+
+            # Send to Kafka
             producer.send(TOPIC_NAME, row)
             duration = time.time() - start_time
 
