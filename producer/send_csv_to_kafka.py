@@ -36,6 +36,7 @@ FLOW_RATE = Gauge('kafka_flow_rate_lps', 'Flow rate (liters/sec)', ['flow_tag'])
 PUMP_P2_ACTIVITY = Gauge('kafka_pump_status_p2', 'Stage P2 pump status (0=off, 1=on)', ['pump'])
 PUMP_P4_ACTIVITY = Gauge('kafka_pump_status_p4', 'Stage P4 pump status (0=off, 1=on)', ['pump'])
 FLOW_P5_RATE = Gauge('kafka_flow_rate_p5_lps', 'Stage P5 flow rates (L/min)', ['flow_tag'])
+PIT_PRESSURE = Counter('kafka_pit_pressure_stage5', 'Pit pressure outlier events by tag', ['tag'])
 
 DATA_RATE = Gauge('kafka_data_rows_per_second', 'Producer data rate in rows per second (1s window)')
 
@@ -61,9 +62,9 @@ def stream_csv_to_kafka():
 
             # Send to Kafka
             producer.send(TOPIC_NAME, row)
+            producer.flush()
             duration = time.time() - start_time
 
-            # Update Prometheus metrics
             MESSAGES_SENT.inc()
             PROCESSING_TIME.observe(duration)
 
@@ -88,12 +89,19 @@ def stream_csv_to_kafka():
                 try:
                     level = float(row.get(tank_tag, 0))
                     TANK_LEVEL.labels(tank=tank_tag).set(level)
-                    if level < 400 or level > 800:
+                    if level < 300 or level > 1000:
                         SENSOR_OUTLIER_DETECTED.labels(tag=tank_tag).inc()
                 except:
 
                     continue
 
+            # Water level
+            for pit_tag in ["PIT501", "PIT502", "PIT503"]:
+                try:
+                    level = float(row.get(pit_tag, 0))
+                    PIT_PRESSURE.labels(tag=pit_tag).set(level)
+                except:
+                    continue
 
             # Flow rates for stage 5
             for flow_tag in [f"FIT50{i}" for i in range(1, 5)]:
