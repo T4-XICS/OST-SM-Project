@@ -1,0 +1,333 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Purpose: visualize pH/ORP/Conductivity and dosing pump activity.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 7,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "P951FEA4DE68E13C5"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "AIT201 Normal"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "pH"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "AIT202 Normal"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "mvolt"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "AIT203 Normal"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "qS/cm"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "P951FEA4DE68E13C5"
+          },
+          "query": "from(bucket:\"swat_db\")\r\n  |> range(start:v.timeRangeStart, stop:v.timeRangeStop)\r\n  |> filter(fn:(r)=> r._field == \"AIT201\" or r._field == \"AIT202\" or r._field == \"AIT203\")\r\n  |> aggregateWindow(every:v.windowPeriod, fn: mean, createEmpty:false)\r\n  |> yield()\r\n",
+          "refId": "A"
+        }
+      ],
+      "title": "Multi-line Graph — pH / ORP / Conductivity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "P951FEA4DE68E13C5"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "id": 2,
+      "options": {
+        "calculate": true,
+        "calculation": {
+          "xBuckets": {
+            "mode": "count",
+            "value": ""
+          },
+          "yBuckets": {
+            "mode": "size",
+            "scale": {
+              "type": "linear"
+            },
+            "value": ""
+          }
+        },
+        "cellGap": 1,
+        "cellValues": {
+          "unit": ""
+        },
+        "color": {
+          "exponent": 0.5,
+          "fill": "dark-orange",
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Oranges",
+          "steps": 64
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "tooltip": {
+          "mode": "single",
+          "showColorScale": false,
+          "yHistogram": false
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "decimals": 1,
+          "reverse": false,
+          "unit": ""
+        }
+      },
+      "pluginVersion": "12.2.0",
+      "targets": [
+        {
+          "query": "from(bucket:\"swat_db\")\r\n  |> range(start:v.timeRangeStart, stop:v.timeRangeStop)\r\n  |> filter(fn:(r)=> r._field == \"AIT201\")\r\n  |> aggregateWindow(every: 10s, fn: mean, createEmpty:false)\r\n  |> map(fn:(r)=> ({ _time:r._time, _value:r._value }))\r\n",
+          "refId": "A"
+        }
+      ],
+      "title": "Heatmap — pH variability over time",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "P951FEA4DE68E13C5"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "id": 3,
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "pluginVersion": "12.2.0",
+      "targets": [
+        {
+          "query": "from(bucket:\"swat_db\")\r\n  |> range(start:v.timeRangeStart, stop:v.timeRangeStop)\r\n  |> filter(fn:(r)=> r._field == \"P201\" or r._field == \"P202\" or r._field == \"P203\" or r._field == \"P204\" or r._field == \"P205\" or r._field == \"P206\")\r\n  |> filter(fn:(r)=> r._value == 1) // assuming ON==1\r\n  |> aggregateWindow(every: 1h, fn: count, createEmpty:false)\r\n  |> group(columns: [\"_field\"])\r\n",
+          "refId": "A"
+        }
+      ],
+      "title": "Pump activation histogram (count of ON events)",
+      "type": "bargauge"
+    }
+  ],
+  "preload": false,
+  "schemaVersion": 42,
+  "tags": [
+    "swat_db",
+    "stage_P2"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "2015-12-22T16:00:00.000Z",
+    "to": "2015-12-22T17:00:00.000Z"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Chemical Dosing",
+  "uid": "adxw97c",
+  "version": 1
+}
