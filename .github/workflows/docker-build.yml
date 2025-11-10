@@ -51,12 +51,12 @@ jobs:
             henrikberenyi/producer:latest
             henrikberenyi/producer:${{ github.sha }}
 
-      - name: Build and push kafka-to-influx image
+      - name: Build and push influxdb-export image
         uses: docker/build-push-action@v4
         with:
           context: .
-          file: consumer/Dockerfile
+          file: influxdb-export/Dockerfile
           push: true
           tags: |
-            henrikberenyi/kafka-to-influx:latest
-            henrikberenyi/kafka-to-influx:${{ github.sha }}
+            henrikberenyi/influxdb-export:latest
+            henrikberenyi/influxdb-export:${{ github.sha }}

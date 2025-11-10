@@ -6,7 +6,7 @@ Dependencies: kafka-python, influxdb-client, pandas
 
 Usage:
 pip install kafka-python influxdb-client pandas
-python consumer/kafka_to_influx.py --bootstrap localhost:9092 --topic ics-sensor-data \
+python influxdb-export/kafka_to_influx.py --bootstrap localhost:9092 --topic ics-sensor-data \
   --influx-url http://localhost:8086 --influx-org ucs --influx-bucket swat_db --token <TOKEN>
 """
 import argparse

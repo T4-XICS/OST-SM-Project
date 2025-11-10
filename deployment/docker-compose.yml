@@ -58,7 +58,7 @@ services:
     command: sh -c 'influx bucket create -n prometheus -o ucs --token ${INFLUXDB_TOKEN} --host http://influxdb:8086 || true'
     networks:
       - icsnet
-    restart: "no"
+    restart: no
 
   grafana:
     image: grafana/grafana:latest
@@ -130,9 +130,11 @@ services:
   kafka-to-influx:
     build:
       context: ../
-      dockerfile: consumer/Dockerfile
+      dockerfile: influxdb-export/Dockerfile
     environment:
       - INFLUX_TOKEN=${INFLUXDB_TOKEN}
+      - PYTHON_SCRIPT=/app/kafka_to_influx.py
+      - INFLUX_BUCKET=swat_db
     container_name: kafka-to-influx
     depends_on:
       kafka:
@@ -148,18 +150,12 @@ services:
   prometheus-to-influx:
     build:
       context: ../
-      dockerfile: consumer/Dockerfile
+      dockerfile: influxdb-export/Dockerfile
     container_name: prometheus-to-influx
-    command: >
-      python -u /app/prometheus_to_influx.py
-        --prometheus-url http://prometheus:9090
-        --influx-url http://influxdb:8086
-        --influx-org ucs
-        --influx-bucket prometheus
-        --token ${INFLUXDB_TOKEN}
-        --interval 15
     environment:
       - INFLUX_TOKEN=${INFLUXDB_TOKEN}
+      - PYTHON_SCRIPT=/app/prometheus_to_influx.py
+      - INFLUX_BUCKET=prometheus
       - PYTHONUNBUFFERED=1
     depends_on:
       prometheus:

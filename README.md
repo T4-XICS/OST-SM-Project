@@ -127,7 +127,7 @@ docker compose up -d --build
   - Password: `adminpass`
   - Default bucket: `swat_db`
   - Default org: `ucs`
-  - Admin token: `admintoken123`
+  - Admin token: Set via `INFLUXDB_TOKEN` environment variable (e.g., `admintoken123`)
 - Prometheus (UI): `http://localhost:9090`
 - Kafka (UI): `http://localhost:9092`
 
