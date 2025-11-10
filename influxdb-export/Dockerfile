@@ -9,19 +9,15 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     pip install --no-cache-dir kafka-python influxdb-client pandas prometheus-api-client
 
-# Copy consumer scripts
-COPY consumer/kafka_to_influx.py /app/kafka_to_influx.py
-COPY consumer/prometheus_to_influx.py /app/prometheus_to_influx.py
+# Copy scripts
+COPY influxdb-export/kafka_to_influx.py /app/kafka_to_influx.py
+COPY influxdb-export/prometheus_to_influx.py /app/prometheus_to_influx.py
 
 # Add debugging script
 RUN echo '#!/bin/bash\necho "KAFKA_SERVER=kafka:9092"\necho "INFLUX_URL=http://influxdb:8086"\necho "Current processes:"\nps aux\necho "\nPython processes:"\nps aux | grep python\necho "\nNetwork connectivity:"\necho "Kafka:"\ncurl -v telnet://kafka:9092 2>&1 | grep "Connected"\necho "InfluxDB:"\ncurl -v http://influxdb:8086/health 2>&1 | grep -E "Connected|status"\n' > /app/debug.sh && \
     chmod +x /app/debug.sh
 
-# Default command - use shell form to avoid issues with multi-line
-CMD python /app/kafka_to_influx.py \
-    --bootstrap kafka:9092 \
-    --topic ics-sensor-data \
-    --influx-url http://influxdb:8086 \
-    --influx-org ucs \
-    --influx-bucket swat_db \
-    --token $INFLUX_TOKEN
+COPY influxdb-export/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]

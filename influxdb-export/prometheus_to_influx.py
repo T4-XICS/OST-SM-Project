@@ -7,7 +7,7 @@ Dependencies: prometheus-api-client, influxdb-client
 
 Usage:
 pip install prometheus-api-client influxdb-client
-python consumer/prometheus_to_influx.py --prometheus-url http://localhost:9090 \
+python influxdb-export/prometheus_to_influx.py --prometheus-url http://localhost:9090 \
   --influx-url http://localhost:8086 --influx-org ucs --influx-bucket prometheus --token <TOKEN>
 """
 import argparse

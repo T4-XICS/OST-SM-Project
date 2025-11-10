@@ -88,13 +88,12 @@ The system will work with any streaming data tool (like Kafka,or others). It wil
 
 ---
 
-
-
 ## Quick Start — Local demo stack & end-to-end usage
 
 This section explains how to run the local development stack and exercise the pipeline (CSV → Kafka → PySpark → InfluxDB → Grafana/Prometheus). It assumes Docker (Docker Desktop) is installed and working and that you have cloned the repository.
 
 ### Repo layout (important files)
+
 - `deployment/` — docker-compose and provisioning (Kafka, Zookeeper, InfluxDB, Grafana, Prometheus).  
 - `datasets/swat/` — put SWaT (or other) sample CSVs here.
 - `model/` — place trained model checkpoints (e.g., `checkpoint.pt`) here.  
@@ -102,6 +101,7 @@ This section explains how to run the local development stack and exercise the pi
 ---
 
 ### 0) Prerequisites
+
 - Docker Desktop (Windows/macOS) or Docker Engine (Linux).  
 - Python 3.8+ for producer scripts.  
 - (Optional) Apache Spark if you run `pyspark_consumer.py` via `spark-submit` locally.
@@ -109,13 +109,16 @@ This section explains how to run the local development stack and exercise the pi
 ---
 
 ### 1) Start the stack
+
 Run from the `deployment/` folder:
+
 ```bash
 cd deployment
 docker compose up -d --build
 ```
 
 ### 2) What runs where (default URLs & credentials)
+
 - Grafana (UI): `http://localhost:3000`
   - Username: `admin`
   - Password: `admin2`
@@ -124,13 +127,24 @@ docker compose up -d --build
   - Password: `adminpass`
   - Default bucket: `swat_db`
   - Default org: `ucs`
-  - Admin token: `admintoken123`
+  - Admin token: Set via `INFLUXDB_TOKEN` environment variable (e.g., `admintoken123`)
 - Prometheus (UI): `http://localhost:9090`
 - Kafka (UI): `http://localhost:9092`
- 
-### In case of something is not working:
+
+#### Local Environment Variables (.env)
+
+To run the project locally, you need to provide an InfluxDB token as an environment variable. This is done by creating a `.env` file in the `deployment/` directory (the same directory as the `docker-compose.yml` file). Docker Compose will automatically load environment variables from this file.
+
+**Steps:**
+
+1. In the `deployment/` directory, create a file named `.env` (if it does not already exist).
+2. Add the following line to the `.env` file:
+
+  ```env
+  INFLUXDB_TOKEN=admintoken123
+  ```
+
+### In case of something is not working
+
 - If one or more of the applications are not working correctly, for example showing something else than to the others, you should head to the Docker Desktop - Volumes and delete the problematic application volume.
 - There might be some leftover information in the volumes saved, and a `docker compose up -d --build` will not rebuild it properly
-  
-
-
