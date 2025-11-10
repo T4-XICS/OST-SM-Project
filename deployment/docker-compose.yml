@@ -1,4 +1,4 @@
-#version: "3.8"
+version: "3.8"
 services:
   kafka:
     image: bitnamilegacy/kafka:3.5.1
@@ -50,6 +50,16 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  init-influxdb:
+    image: influxdb:latest
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    command: sh -c 'influx bucket create -n prometheus -o ucs --token admintoken123 --host http://influxdb:8086 || true'
+    networks:
+      - icsnet
+    restart: "no"
 
   grafana:
     image: grafana/grafana:latest
@@ -123,7 +133,7 @@ services:
       context: ../
       dockerfile: consumer/Dockerfile
     environment:
-      - INFLUX_TOKEN=QxzNbxYC3mh15AOYK5e1rweiLzHsS9WqlCDvZ9VTRdTcvVO3gbp2FexttgNzwecf06BdA5On8SSPu6Ky1UBDXQ==
+      - INFLUX_TOKEN=admintoken123
     container_name: kafka-to-influx
     depends_on:
       kafka:
@@ -143,69 +153,71 @@ services:
     container_name: prometheus-to-influx
     command: >
       python -u /app/prometheus_to_influx.py
-      --prometheus-url http://prometheus:9090
-      --influx-url http://influxdb:8086
-      --influx-org ucs
-      --influx-bucket prometheus
-      --token QxzNbxYC3mh15AOYK5e1rweiLzHsS9WqlCDvZ9VTRdTcvVO3gbp2FexttgNzwecf06BdA5On8SSPu6Ky1UBDXQ==
-      --interval 15
+        --prometheus-url http://prometheus:9090
+        --influx-url http://influxdb:8086
+        --influx-org ucs
+        --influx-bucket prometheus
+        --token admintoken123
+        --interval 15
     environment:
-      - INFLUX_TOKEN=QxzNbxYC3mh15AOYK5e1rweiLzHsS9WqlCDvZ9VTRdTcvVO3gbp2FexttgNzwecf06BdA5On8SSPu6Ky1UBDXQ==
+      - INFLUX_TOKEN=admintoken123
       - PYTHONUNBUFFERED=1
     depends_on:
       prometheus:
         condition: service_started
       influxdb:
         condition: service_healthy
+      init-influxdb:
+        condition: service_completed_successfully
     restart: on-failure
     networks:
       - icsnet
 
-  # spark-consumer:
-  #   build:
-  #     context: ../model
-  #   container_name: spark-consumer
-  #   command: ["inference.py"]
-  #   depends_on:
-  #     - producer
-  #   # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
-  #   gpus: all
-  #   environment:
-  #     - NVIDIA_VISIBLE_DEVICES=all
-  #     - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-  #     - SERVICE_NAME=spark-consumer
-  #     - LOG_LEVEL=INFO
-  #   networks:
-  #     - icsnet
-  #   ports:
-  #     - "4040:4040"  # Spark UI
-  #   labels:
-  #     - "logging=promtail"
-  #     - "app=spark-consumer"
+  spark-consumer:
+    build:
+      context: ../model
+    container_name: spark-consumer
+    command: ["inference.py"]
+    depends_on:
+      - producer
+    # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
+    gpus: all
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - SERVICE_NAME=spark-consumer
+      - LOG_LEVEL=INFO
+    networks:
+      - icsnet
+    ports:
+      - "4040:4040"  # Spark UI
+    labels:
+      - "logging=promtail"
+      - "app=spark-consumer"
 
-  # spark-train:
-  #   build:
-  #     context: ../model
-  #   container_name: spark-train
-  #   command: ["train.py"]
-  #   depends_on:
-  #     - producer
-  #   # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
-  #   gpus: all
-  #   environment:
-  #     - NVIDIA_VISIBLE_DEVICES=all
-  #     - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-  #     - SERVICE_NAME=spark-train
-  #     - LOG_LEVEL=INFO
-  #   networks:
-  #     - icsnet
-  #   ports:
-  #     - "4041:4040"  # Spark UI
-  #   volumes:
-  #     - ../model/weights:/weights
-  #   labels:
-  #     - "logging=promtail"
-  #     - "app=spark-train"
+  spark-train:
+    build:
+      context: ../model
+    container_name: spark-train
+    command: ["train.py"]
+    depends_on:
+      - producer
+    # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
+    gpus: all
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - SERVICE_NAME=spark-train
+      - LOG_LEVEL=INFO
+    networks:
+      - icsnet
+    ports:
+      - "4041:4040"  # Spark UI
+    volumes:
+      - ../model/weights:/weights
+    labels:
+      - "logging=promtail"
+      - "app=spark-train"
 
 networks:
   icsnet:
