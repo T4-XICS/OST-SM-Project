@@ -186,6 +186,7 @@ services:
       - icsnet
     ports:
       - "4040:4040"  # Spark UI
+      - "8001:8001"  # Prometheus endpoint
     labels:
       - "logging=promtail"
       - "app=spark-consumer"

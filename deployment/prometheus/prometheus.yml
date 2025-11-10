@@ -9,3 +9,7 @@ scrape_configs:
   - job_name: 'kafka-producer'
     static_configs:
       - targets: ['producer:8000']
+
+  - job_name: 'spark-consumer-inference'
+    static_configs:
+      - targets: ['spark-consumer:8001']
