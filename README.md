@@ -133,11 +133,11 @@ docker compose up -d --build
 
 #### Local Environment Variables (.env)
 
-To run the project locally, you need to provide an InfluxDB token as an environment variable. This is done by creating a `.env` file in the project root directory. Docker Compose will automatically load environment variables from this file.
+To run the project locally, you need to provide an InfluxDB token as an environment variable. This is done by creating a `.env` file in the `deployment/` directory (the same directory as the `docker-compose.yml` file). Docker Compose will automatically load environment variables from this file.
 
 **Steps:**
 
-1. In the root of the repository, create a file named `.env` (if it does not already exist).
+1. In the `deployment/` directory, create a file named `.env` (if it does not already exist).
 2. Add the following line to the `.env` file:
 
   ```env
