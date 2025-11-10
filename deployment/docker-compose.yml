@@ -1,4 +1,3 @@
-version: "3.8"
 services:
   kafka:
     image: bitnamilegacy/kafka:3.5.1
@@ -37,7 +36,7 @@ services:
       - DOCKER_INFLUXDB_INIT_PASSWORD=adminpass
       - DOCKER_INFLUXDB_INIT_ORG=ucs
       - DOCKER_INFLUXDB_INIT_BUCKET=swat_db
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=admintoken123
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
     ports:
       - "8086:8086"
     networks:
@@ -56,7 +55,7 @@ services:
     depends_on:
       influxdb:
         condition: service_healthy
-    command: sh -c 'influx bucket create -n prometheus -o ucs --token admintoken123 --host http://influxdb:8086 || true'
+    command: sh -c 'influx bucket create -n prometheus -o ucs --token ${INFLUXDB_TOKEN} --host http://influxdb:8086 || true'
     networks:
       - icsnet
     restart: "no"
@@ -133,7 +132,7 @@ services:
       context: ../
       dockerfile: consumer/Dockerfile
     environment:
-      - INFLUX_TOKEN=admintoken123
+      - INFLUX_TOKEN=${INFLUXDB_TOKEN}
     container_name: kafka-to-influx
     depends_on:
       kafka:
@@ -157,10 +156,10 @@ services:
         --influx-url http://influxdb:8086
         --influx-org ucs
         --influx-bucket prometheus
-        --token admintoken123
+        --token ${INFLUXDB_TOKEN}
         --interval 15
     environment:
-      - INFLUX_TOKEN=admintoken123
+      - INFLUX_TOKEN=${INFLUXDB_TOKEN}
       - PYTHONUNBUFFERED=1
     depends_on:
       prometheus:
