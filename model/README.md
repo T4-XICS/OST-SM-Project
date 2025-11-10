@@ -50,17 +50,17 @@ spark-submit inference.py
 
 ### Prometheus Reporting for Anomalies
 
-The inference service exposes detected anomalous sensor data as Prometheus metrics on port 8000. Each detected anomaly sets the `anomalous_sensor_event` gauge for the affected sensors.
+The inference service exposes detected anomalous sensor data as Prometheus metrics on port 8001. Each detected anomaly sets the `anomalous_sensor_event` gauge for the affected sensors.
 
 #### How to use
 
-1. Ensure the model container is running and port 8000 is accessible to Prometheus.
+1. Ensure the model container is running and port 8001 is accessible to Prometheus.
 2. Add the following scrape config to your Prometheus configuration:
 
     ```yaml
         - job_name: 'model-anomaly-inference'
             static_configs:
-                - targets: ['model:8000']  # Replace 'model' with the actual service name or IP
+                - targets: ['model:8001']  # Replace 'model' with the actual service name or IP
     ```
 
 3. The metric `anomalous_sensor_event{sensor="SENSOR_NAME"}` will be set to the sensor value when an anomaly is detected, or 0 otherwise.
