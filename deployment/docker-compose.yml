@@ -1,9 +1,9 @@
+#version: "3.8"
 services:
   kafka:
     image: bitnamilegacy/kafka:3.5.1
     container_name: kafka
     environment:
-      # run broker and controller in the same process (single-node KRaft)
       - KAFKA_CFG_PROCESS_ROLES=broker,controller
       - KAFKA_CFG_NODE_ID=1
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
@@ -11,7 +11,6 @@ services:
       - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
-      # useful logging on startup
       - ALLOW_PLAINTEXT_LISTENER=yes
     ports:
       - "9092:9092"
@@ -26,7 +25,6 @@ services:
       retries: 5
       start_period: 20s
 
-
   influxdb:
     image: influxdb:latest
     container_name: influxdb
@@ -36,7 +34,7 @@ services:
       - DOCKER_INFLUXDB_INIT_PASSWORD=adminpass
       - DOCKER_INFLUXDB_INIT_ORG=ucs
       - DOCKER_INFLUXDB_INIT_BUCKET=swat_db
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=admintoken123
     ports:
       - "8086:8086"
     networks:
@@ -50,16 +48,6 @@ services:
       retries: 5
       start_period: 30s
 
-  init-influxdb:
-    image: influxdb:latest
-    depends_on:
-      influxdb:
-        condition: service_healthy
-    command: sh -c 'influx bucket create -n prometheus -o ucs --token ${INFLUXDB_TOKEN} --host http://influxdb:8086 || true'
-    networks:
-      - icsnet
-    restart: no
-
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
@@ -67,7 +55,6 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
-      # make Grafana load provisioning files
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
     ports:
       - "3000:3000"
@@ -76,31 +63,6 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
-
-  loki:
-    image: grafana/loki:2.9.3
-    container_name: loki
-    command: ["-config.file=/etc/loki/config.yml"]
-    ports:
-      - "3100:3100"
-    networks:
-      - icsnet
-    volumes:
-      - ./loki/config.yml:/etc/loki/config.yml:ro
-      - loki_data:/loki
-
-  promtail:
-    image: grafana/promtail:2.9.3
-    container_name: promtail
-    command: ["-config.file=/etc/promtail/config.yml"]
-    depends_on:
-      - loki
-    networks:
-      - icsnet
-    volumes:
-      - ./promtail/config.yml:/etc/promtail/config.yml:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock
 
   prometheus:
     image: prom/prometheus:latest
@@ -113,6 +75,25 @@ services:
     networks:
       - icsnet
 
+  explainability:
+    build:
+      context: ..
+      dockerfile: explainability/Dockerfile
+    container_name: explainability
+    depends_on:
+      - kafka
+      - influxdb
+    environment:
+      KAFKA_BOOTSTRAP: "kafka:9092"
+      KAFKA_TOPIC: "ics-sensor-data"
+      INFLUX_URL: "http://influxdb:8086"
+      INFLUX_ORG: "ucs"
+      INFLUX_TOKEN: "admintoken123"
+      INFLUX_BUCKET: "explain_db"
+    networks:
+      - icsnet
+    restart: on-failure
+ 
   producer:
     build:
       context: ../
@@ -126,15 +107,12 @@ services:
     ports:
       - "8000:8000"
 
-      
   kafka-to-influx:
     build:
       context: ../
-      dockerfile: influxdb-export/Dockerfile
+      dockerfile: consumer/Dockerfile
     environment:
-      - INFLUX_TOKEN=${INFLUXDB_TOKEN}
-      - PYTHON_SCRIPT=/app/kafka_to_influx.py
-      - INFLUX_BUCKET=swat_db
+      - INFLUX_TOKEN=admintoken123
     container_name: kafka-to-influx
     depends_on:
       kafka:
@@ -147,27 +125,7 @@ services:
     networks:
       - icsnet
 
-  prometheus-to-influx:
-    build:
-      context: ../
-      dockerfile: influxdb-export/Dockerfile
-    container_name: prometheus-to-influx
-    environment:
-      - INFLUX_TOKEN=${INFLUXDB_TOKEN}
-      - PYTHON_SCRIPT=/app/prometheus_to_influx.py
-      - INFLUX_BUCKET=prometheus
-      - PYTHONUNBUFFERED=1
-    depends_on:
-      prometheus:
-        condition: service_started
-      influxdb:
-        condition: service_healthy
-      init-influxdb:
-        condition: service_completed_successfully
-    restart: on-failure
-    networks:
-      - icsnet
-
+  # ---------- CPU-only (GPU lines removed) ----------
   spark-consumer:
     build:
       context: ../model
@@ -175,20 +133,10 @@ services:
     command: ["inference.py"]
     depends_on:
       - producer
-    # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
-    gpus: all
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-      - SERVICE_NAME=spark-consumer
-      - LOG_LEVEL=INFO
     networks:
       - icsnet
     ports:
       - "4040:4040"  # Spark UI
-    labels:
-      - "logging=promtail"
-      - "app=spark-consumer"
 
   spark-train:
     build:
@@ -197,22 +145,13 @@ services:
     command: ["train.py"]
     depends_on:
       - producer
-    # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
-    gpus: all
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-      - SERVICE_NAME=spark-train
-      - LOG_LEVEL=INFO
     networks:
       - icsnet
     ports:
       - "4041:4040"  # Spark UI
     volumes:
       - ../model/weights:/weights
-    labels:
-      - "logging=promtail"
-      - "app=spark-train"
+  # --------------------------------------------------
 
 networks:
   icsnet:
@@ -223,4 +162,4 @@ volumes:
   influxdb_data:
   grafana_data:
   prometheus_data:
-  loki_data:
+
