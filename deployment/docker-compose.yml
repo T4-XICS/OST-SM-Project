@@ -4,7 +4,6 @@ services:
     image: bitnamilegacy/kafka:3.5.1
     container_name: kafka
     environment:
-      # run broker and controller in the same process (single-node KRaft)
       - KAFKA_CFG_PROCESS_ROLES=broker,controller
       - KAFKA_CFG_NODE_ID=1
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
@@ -12,7 +11,6 @@ services:
       - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
       - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
-      # useful logging on startup
       - ALLOW_PLAINTEXT_LISTENER=yes
     ports:
       - "9092:9092"
@@ -26,7 +24,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-
 
   influxdb:
     image: influxdb:latest
@@ -58,7 +55,6 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
-      # make Grafana load provisioning files
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
     ports:
       - "3000:3000"
@@ -79,6 +75,25 @@ services:
     networks:
       - icsnet
 
+  explainability:
+    build:
+      context: ..
+      dockerfile: explainability/Dockerfile
+    container_name: explainability
+    depends_on:
+      - kafka
+      - influxdb
+    environment:
+      KAFKA_BOOTSTRAP: "kafka:9092"
+      KAFKA_TOPIC: "ics-sensor-data"
+      INFLUX_URL: "http://influxdb:8086"
+      INFLUX_ORG: "ucs"
+      INFLUX_TOKEN: "admintoken123"
+      INFLUX_BUCKET: "explain_db"
+    networks:
+      - icsnet
+    restart: on-failure
+ 
   producer:
     build:
       context: ../
@@ -92,7 +107,6 @@ services:
     ports:
       - "8000:8000"
 
-      
   kafka-to-influx:
     build:
       context: ../
@@ -111,6 +125,7 @@ services:
     networks:
       - icsnet
 
+  # ---------- CPU-only (GPU lines removed) ----------
   spark-consumer:
     build:
       context: ../model
@@ -118,11 +133,6 @@ services:
     command: ["inference.py"]
     depends_on:
       - producer
-    # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
-    gpus: all
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     networks:
       - icsnet
     ports:
@@ -135,17 +145,13 @@ services:
     command: ["train.py"]
     depends_on:
       - producer
-    # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
-    gpus: all
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     networks:
       - icsnet
     ports:
       - "4041:4040"  # Spark UI
     volumes:
       - ../model/weights:/weights
+  # --------------------------------------------------
 
 networks:
   icsnet:
@@ -156,3 +162,4 @@ volumes:
   influxdb_data:
   grafana_data:
   prometheus_data:
+

@@ -5,6 +5,16 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, TimestampType
+import os
+
+# Environment variables for configuration
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "ics-sensor-data")
+INFLUX_URL = os.getenv("INFLUX_URL", "http://influxdb:8086")
+INFLUX_ORG = os.getenv("INFLUX_ORG", "ucs")
+INFLUX_TOKEN = os.getenv("INFLUX_TOKEN", "admintoken123")
+INFLUX_BUCKET = os.getenv("INFLUX_BUCKET", "explain_db")
+
 
 def main():
     # 1️⃣ Create Spark session
@@ -27,8 +37,8 @@ def main():
     kafka_df = (
         spark.readStream
         .format("kafka")
-        .option("kafka.bootstrap.servers", "kafka:9092")
-        .option("subscribe", "ics-sensor-data")
+        .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP)
+        .option("subscribe", KAFKA_TOPIC)
         .load()
     )
 
