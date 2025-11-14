@@ -1,32 +1,158 @@
 # -*- coding: utf-8 -*-
-# Stream Explainability Job
-# Author: Soma Tohidinia
+"""
+Stream Explainability Job
 
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, TimestampType
+Reads SWaT JSON rows from Kafka, computes rolling features and a proxy
+anomaly score, trains a RandomForest surrogate model, and publishes
+SHAP-based feature importance metrics to Prometheus.
+
+This runs as a Structured Streaming job in Spark.
+"""
+
 import os
-from prometheus_client import start_http_server
-start_http_server(9000)  # port for Prometheus metrics
-from explainability.shap_explainer import ShapExplainer
-from explainability.metrics import (
-    EXPLANATIONS_TOTAL,
-    EXPLAINED_SAMPLES_TOTAL,
-    EXPLANATION_LATENCY_SECONDS,
-)
+import json
+import time
+from typing import List
 
+import pandas as pd
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
 
-# Environment variables for configuration
+from explainability.features import rolling_features, proxy_anomaly_score
+from explainability.explainer_surrogate import SurrogateExplainer
+from explainability import metrics_exporter
+
+# --------------------------------------------------------------------
+# Configuration from environment (same as docker-compose)
+# --------------------------------------------------------------------
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "ics-sensor-data")
-INFLUX_URL = os.getenv("INFLUX_URL", "http://influxdb:8086")
-INFLUX_ORG = os.getenv("INFLUX_ORG", "ucs")
-INFLUX_TOKEN = os.getenv("INFLUX_TOKEN", "admintoken123")
-INFLUX_BUCKET = os.getenv("INFLUX_BUCKET", "explain_db")
+
+PROMETHEUS_PORT = int(os.getenv("EXPLAIN_METRICS_PORT", "9109"))
+
+# Columns we want to use as numeric sensors.
+# You can extend this list based on SWaT schema.
+SENSOR_COLUMNS: List[str] = [
+    # put a reasonable subset here; we use a small example list
+    "FIT101", "LIT101", "P101", "P102",
+    "FIT201", "LIT201", "P201", "P202",
+    "FIT301", "LIT301", "P301", "P302",
+]
+
+TIMESTAMP_COL = "Timestamp"          # from SWaT JSON
+LABEL_COL = "Normal_Attack"          # "Normal" / "Attack" (optional)
+
+# --------------------------------------------------------------------
+# Global objects (live on the driver for foreachBatch)
+# --------------------------------------------------------------------
+SURROGATE = SurrogateExplainer(n_estimators=200, random_state=42)
+
+
+def parse_json_batch(pdf: pd.DataFrame) -> pd.DataFrame:
+    """
+    Parse the raw Kafka 'value' column (JSON strings) into a
+    wide pandas DataFrame with numeric sensor columns.
+    """
+    if pdf.empty:
+        return pdf
+
+    parsed_rows = []
+    for raw in pdf["value"]:
+        try:
+            obj = json.loads(raw)
+            parsed_rows.append(obj)
+        except Exception as exc:
+            # debug malformed rows but do not crash the batch
+            print(f"[explainability] JSON parse error: {exc}")
+            continue
+
+    if not parsed_rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(parsed_rows)
+
+    # Keep only the columns we actually care about
+    cols = [c for c in SENSOR_COLUMNS if c in df.columns]
+    if TIMESTAMP_COL in df.columns:
+        cols = [TIMESTAMP_COL] + cols
+    if LABEL_COL in df.columns:
+        cols = cols + [LABEL_COL]
+
+    df = df[cols].copy()
+
+    # Convert numeric sensors to float
+    for c in SENSOR_COLUMNS:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    return df
+
+
+def process_batch(sdf, batch_id: int):
+    """
+    foreachBatch function executed on the driver for every micro-batch.
+    Converts Spark DataFrame -> pandas, computes features, trains surrogate,
+    and publishes SHAP metrics to Prometheus.
+    """
+    start_time = time.perf_counter()
+
+    # DEBUGه
+    if sdf.rdd.isEmpty():
+        print(f"[explainability] [batch {batch_id}] empty batch, skipping.")
+        return
+
+    row_count = sdf.count()
+    print(f"[explainability] [batch {batch_id}] received {row_count} raw rows from Kafka.")
+
+    # Convert only the Kafka value (JSON) to pandas
+    pdf_raw = sdf.select(col("value").cast("string")).toPandas()
+    df = parse_json_batch(pdf_raw)
+
+    if df.empty:
+        print(f"[explainability] [batch {batch_id}] no parsable JSON rows after parsing, skipping.")
+        return
+
+    # Drop rows with too many NaNs
+    df = df.dropna(subset=[c for c in SENSOR_COLUMNS if c in df.columns])
+    if df.empty:
+        print(f"[explainability] [batch {batch_id}] all rows NaN after cleaning, skipping.")
+        return
+
+    # Build rolling features
+    numeric_cols = [c for c in SENSOR_COLUMNS if c in df.columns]
+    feats = rolling_features(df, numeric_cols, window=3)
+    if feats.empty:
+        print(f"[explainability] [batch {batch_id}] not enough rows for rolling window, skipping.")
+        return
+
+    # Compute proxy anomaly score (sum of |z-last|)
+    scores = proxy_anomaly_score(feats)
+
+    # Train / update surrogate model
+    SURROGATE.fit(feats, scores)
+
+    # Explain the last window
+    abs_mean_map, top_pairs = SURROGATE.explain_last(feats, top_k=5)
+
+    # Publish metrics to Prometheus
+    metrics_exporter.publish_shap_mean(abs_mean_map)
+    metrics_exporter.publish_topk(top_pairs)
+
+    duration = time.perf_counter() - start_time
+    print(f"[explainability] [batch {batch_id}] explained {len(feats)} samples in {duration:.3f}s")
+    print(f"[explainability] [batch {batch_id}] top features: {top_pairs}")
 
 
 def main():
-    # 1️⃣ Create Spark session
+    # DEBUG:  job
+    print("[explainability] starting stream_explain_job")
+    print(f"[explainability] KAFKA_BOOTSTRAP={KAFKA_BOOTSTRAP}, topic={KAFKA_TOPIC}")
+    print(f"[explainability] Prometheus metrics on port {PROMETHEUS_PORT}")
+
+    # Start metrics HTTP server for Prometheus scraping
+    metrics_exporter.start(PROMETHEUS_PORT)
+
+    # Create Spark session
     spark = (
         SparkSession.builder
         .appName("ExplainabilityStream")
@@ -34,15 +160,7 @@ def main():
     )
     spark.sparkContext.setLogLevel("WARN")
 
-    # 2️⃣ Define schema for incoming data
-    schema = StructType([
-        StructField("tag", StringType()),
-        StructField("value", DoubleType()),
-        StructField("status", StringType()),
-        StructField("timestamp", TimestampType()),
-    ])
-
-    # 3️⃣ Read live Kafka stream
+    # Read raw Kafka stream (no schema; JSON handled in foreachBatch)
     kafka_df = (
         spark.readStream
         .format("kafka")
@@ -51,26 +169,20 @@ def main():
         .load()
     )
 
-    # 4️⃣ Parse JSON payload
-    parsed_df = (
-        kafka_df.selectExpr("CAST(value AS STRING) as data")
-        .select(from_json(col("data"), schema).alias("data"))
-        .select("data.*")
-    )
+    # We only need the value column (JSON string)
+    value_df = kafka_df.select("value")
 
-    # 5️⃣ Simple aggregation (placeholder for SHAP/LIME)
-    agg_df = parsed_df.groupBy("tag").count()
-
-    # 6️⃣ Output to console for testing
+    # Attach foreachBatch with our explainability logic
     query = (
-        agg_df.writeStream
-        .format("console")
-        .outputMode("complete")
-        .option("truncate", False)
+        value_df.writeStream
+        .foreachBatch(process_batch)
+        .outputMode("append")   # no aggregation sink, just side effects
         .start()
     )
 
+    print("[explainability] streaming query started, awaiting termination.")
     query.awaitTermination()
+
 
 if __name__ == "__main__":
     main()

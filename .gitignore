@@ -219,3 +219,4 @@ __pycache__/
 datasets/**
 # notebooks junk
 .ipynb_checkpoints/
+model/weights/*.pth

@@ -2,3 +2,4 @@ pyspark==3.5.1
 kafka-python
 influxdb-client
 prometheus_client==0.20.0
+shap
