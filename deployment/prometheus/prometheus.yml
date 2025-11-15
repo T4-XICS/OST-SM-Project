@@ -2,10 +2,22 @@ global:
   scrape_interval: 5s
 
 scrape_configs:
+  # ----------- PROMETHEUS SELF -----------
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
+  # ----------- PRODUCER METRICS -----------
   - job_name: 'kafka-producer'
     static_configs:
       - targets: ['producer:8000']
+
+  # ----------- LSTM-VAE anomaly metrics (spark-consumer) -----------
+  - job_name: 'spark-consumer-metrics'
+    static_configs:
+      - targets: ['spark-consumer:9109']
+
+  # ----------- SHAP + surrogate metrics (explainability) -----------
+  - job_name: 'explainability-metrics'
+    static_configs:
+      - targets: ['explainability:9109']

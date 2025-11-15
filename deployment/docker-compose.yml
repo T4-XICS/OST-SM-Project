@@ -94,6 +94,8 @@ services:
     networks:
       - icsnet
     restart: on-failure
+    ports:
+      - "9110:9109"
  
   producer:
     build:

@@ -6,9 +6,10 @@ Stream Explainability Job
    computes rolling features, trains a surrogate model,
    publishes SHAP-based feature importance to Prometheus.
 
-2) Separately, runs an "AE-bridge" Kafka consumer that
+2) Runs an "AE-bridge" Kafka consumer that
    reads anomaly-score messages from topic ics-anomaly-scores
-   and exposes them as ae_* metrics in Prometheus.
+   and LOGS them for debugging.
+   (AE metrics themselves are exported by the spark-consumer service.)
 
 This runs as a Structured Streaming job in Spark, plus
 a background thread for the AE bridge.
@@ -30,6 +31,7 @@ from explainability.features import rolling_features, proxy_anomaly_score
 from explainability.explainer_surrogate import SurrogateExplainer
 from explainability import metrics_exporter
 
+
 # --------------------------------------------------------------------
 # Configuration from environment (same as docker-compose)
 # --------------------------------------------------------------------
@@ -37,6 +39,7 @@ KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 KAFKA_SENSOR_TOPIC = os.getenv("KAFKA_TOPIC", "ics-sensor-data")
 KAFKA_ANOMALY_TOPIC = os.getenv("ANOMALY_TOPIC", "ics-anomaly-scores")
 
+# Port inside the explainability container for Prometheus metrics
 PROMETHEUS_PORT = int(os.getenv("EXPLAIN_METRICS_PORT", "9109"))
 
 # Columns we want to use as numeric sensors.
@@ -108,44 +111,58 @@ def process_batch(sdf, batch_id: int):
     row_count = sdf.count()
     print(f"[explainability] [batch {batch_id}] received {row_count} raw rows from Kafka.")
 
-    pdf_raw = sdf.select(col("value").cast("string")).toPandas()
-    df = parse_json_batch(pdf_raw)
+    try:
+        pdf_raw = sdf.select(col("value").cast("string")).toPandas()
+        df = parse_json_batch(pdf_raw)
 
-    if df.empty:
-        print(f"[explainability] [batch {batch_id}] no parsable JSON rows after parsing, skipping.")
-        return
+        if df.empty:
+            print(f"[explainability] [batch {batch_id}] no parsable JSON rows after parsing, skipping.")
+            return
 
-    df = df.dropna(subset=[c for c in SENSOR_COLUMNS if c in df.columns])
-    if df.empty:
-        print(f"[explainability] [batch {batch_id}] all rows NaN after cleaning, skipping.")
-        return
+        df = df.dropna(subset=[c for c in SENSOR_COLUMNS if c in df.columns])
+        if df.empty:
+            print(f"[explainability] [batch {batch_id}] all rows NaN after cleaning, skipping.")
+            return
 
-    numeric_cols = [c for c in SENSOR_COLUMNS if c in df.columns]
-    feats = rolling_features(df, numeric_cols, window=3)
-    if feats.empty:
-        print(f"[explainability] [batch {batch_id}] not enough rows for rolling window, skipping.")
-        return
+        numeric_cols = [c for c in SENSOR_COLUMNS if c in df.columns]
+        feats = rolling_features(df, numeric_cols, window=3)
+        if feats.empty:
+            print(f"[explainability] [batch {batch_id}] not enough rows for rolling window, skipping.")
+            return
 
-    # proxy anomaly score (not the AE score, just local one for surrogate)
-    scores = proxy_anomaly_score(feats)
+        # proxy anomaly score (not the AE score, just local one for surrogate)
+        scores = proxy_anomaly_score(feats)
 
-    SURROGATE.fit(feats, scores)
+        # train / update surrogate on this batch
+        SURROGATE.fit(feats, scores)
 
-    abs_mean_map, top_pairs = SURROGATE.explain_last(feats, top_k=5)
+        # explain last sample
+        abs_mean_map, top_pairs = SURROGATE.explain_last(feats, top_k=5)
 
-    metrics_exporter.publish_shap_mean(abs_mean_map)
-    metrics_exporter.publish_topk(top_pairs)
+        # ---- SHAP → Prometheus ----
+        metrics_exporter.publish_shap_mean(abs_mean_map)
+        metrics_exporter.publish_topk(top_pairs)
 
-    duration = time.perf_counter() - start_time
-    print(f"[explainability] [batch {batch_id}] explained {len(feats)} samples in {duration:.3f}s")
-    print(f"[explainability] [batch {batch_id}] top features: {top_pairs}")
+        duration = time.perf_counter() - start_time
+        print(f"[explainability] [batch {batch_id}] explained {len(feats)} samples in {duration:.3f}s")
+        print(f"[explainability] [batch {batch_id}] top features: {top_pairs}")
+
+        # optional latency metric, if defined
+        if hasattr(metrics_exporter, "HIST_LATENCY"):
+            metrics_exporter.HIST_LATENCY.observe(duration)
+
+    except Exception as exc:
+        print(f"[explainability] [batch {batch_id}] ERROR during SHAP pipeline: {exc}")
+        if hasattr(metrics_exporter, "COUNTER_ERR"):
+            metrics_exporter.COUNTER_ERR.inc()
 
 
 # --------------------------------------------------------------------
-# AE bridge: consume anomaly-score topic and update ae_* metrics
+# AE bridge: consume anomaly-score topic and log messages
+# (AE metrics are exported by spark-consumer, not here.)
 # --------------------------------------------------------------------
 def _ae_bridge_loop():
-    """Background loop: consumes anomaly-score messages and updates metrics."""
+    """Background loop: consumes anomaly-score messages and logs them."""
     print(
         f"[explainability][AE-bridge] starting consumer on "
         f"topic={KAFKA_ANOMALY_TOPIC}, bootstrap={KAFKA_BOOTSTRAP}"
@@ -185,9 +202,7 @@ def _ae_bridge_loop():
             f"[explainability][AE-bridge] got anomaly_score={score} "
             f"from partition={msg.partition}, offset={msg.offset}"
         )
-
-        # update Prometheus metrics
-        metrics_exporter.observe_ae_score(score)
+        # metrics for AE are handled in spark-consumer exporter now.
 
 
 def start_ae_bridge():
@@ -207,10 +222,10 @@ def main():
     print(f"[explainability] anomaly topic={KAFKA_ANOMALY_TOPIC}")
     print(f"[explainability] Prometheus metrics on port {PROMETHEUS_PORT}")
 
-    # start Prometheus HTTP server
+    # start Prometheus HTTP server INSIDE the explainability container
     metrics_exporter.start(PROMETHEUS_PORT)
 
-    # start AE bridge in background
+    # start AE bridge in background (logs anomaly scores)
     start_ae_bridge()
 
     # Spark session
