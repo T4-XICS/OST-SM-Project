@@ -1,20 +1,21 @@
 import logging
 import os
-
+import threading
 import numpy as np
 import torch
+
+from prometheus_client import start_http_server, Gauge, Counter
 
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 from pyspark.sql.functions import col, from_json, trim, when
 
 from preprocess_data import preprocess_spark, create_dataloader
-from network import LSTMVAE, load_model
-# we keep evaluate_lstm as-is for other code, but here we use our own scoring
-# from evaluate import evaluate_lstm  # not needed in this file
+from network import LSTMVAE, load_model, loss_function
+
 
 # -----------------------------------------------------------------------------
-# Logging config
+# Logging
 # -----------------------------------------------------------------------------
 SERVICE_NAME = os.getenv("SERVICE_NAME", "spark-consumer")
 
@@ -24,8 +25,46 @@ logging.basicConfig(
 )
 logger = logging.getLogger(SERVICE_NAME)
 
+
 # -----------------------------------------------------------------------------
-# Spark session
+# Prometheus Metrics
+# -----------------------------------------------------------------------------
+# Gauges
+ae_last_anomaly_score = Gauge(
+    "ae_last_anomaly_score",
+    "Last anomaly score from LSTM-VAE"
+)
+
+ae_threshold = Gauge(
+    "ae_threshold",
+    "Threshold used for anomaly detection"
+)
+
+ae_is_anomaly = Gauge(
+    "ae_is_anomaly",
+    "Whether last sequence was anomaly (1/0)"
+)
+
+# Counters
+ae_anomaly_events_total = Counter(
+    "ae_anomaly_events_total",
+    "Total number of anomaly events detected"
+)
+
+
+def start_prometheus_exporter():
+    """Run exporter on port 9109 in background thread."""
+    logger.info("Starting Prometheus exporter on 9109...")
+    start_http_server(9109)
+    logger.info("Prometheus exporter started.")
+
+
+# start metrics server in background
+threading.Thread(target=start_prometheus_exporter, daemon=True).start()
+
+
+# -----------------------------------------------------------------------------
+# Spark
 # -----------------------------------------------------------------------------
 spark = (
     SparkSession.builder
@@ -35,8 +74,9 @@ spark = (
     .getOrCreate()
 )
 
+
 # -----------------------------------------------------------------------------
-# Schema: read everything as string first, then cast numerics
+# Schema
 # -----------------------------------------------------------------------------
 all_fields = [
     "Timestamp","FIT101","LIT101","MV101","P101","P102","AIT201","AIT202","AIT203",
@@ -50,12 +90,14 @@ all_fields = [
 schema = StructType([StructField(f, StringType(), True) for f in all_fields])
 numeric_cols = [c for c in all_fields if c not in ("Timestamp", "Normal_Attack")]
 
+
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 KAFKA_INPUT_TOPIC = os.getenv("KAFKA_INPUT_TOPIC", "ics-sensor-data")
 KAFKA_OUTPUT_TOPIC = os.getenv("KAFKA_OUTPUT_TOPIC", "ics-anomaly-scores")
 
+
 # -----------------------------------------------------------------------------
-# Read stream from Kafka
+# Kafka stream
 # -----------------------------------------------------------------------------
 stream_df = (
     spark.readStream
@@ -72,64 +114,45 @@ logger.info(f"Using device: {device}")
 
 
 # -----------------------------------------------------------------------------
-# Local helper: compute anomaly scores + indices for a dataloader
-# (copy of evaluate_lstm logic, but returns scores too)
+# Evaluation Function
 # -----------------------------------------------------------------------------
-from network import loss_function  # imported here to avoid circular confusion
-
-
-def compute_anomaly_scores(model, data_loader, device, percentile_threshold: int = 90):
-    """Compute reconstruction loss for each sequence and mark anomalies.
-
-    Returns:
-        scores: list of float anomaly scores (one per sequence)
-        anomaly_indices: list of indices that are above the percentile threshold
-        threshold: the numeric threshold used
-    """
+def compute_scores(model, dataloader, device, percentile_threshold=90):
     model.eval()
     scores = []
 
     with torch.no_grad():
-        for batch in data_loader:
+        for batch in dataloader:
             batch = torch.tensor(batch, dtype=torch.float32).to(device)
-
             for i in range(batch.shape[0]):
-                sequence = batch[i, :, :].unsqueeze(0)
-                recon_batch, mean, logvar = model(sequence)
-                loss = loss_function(recon_batch, sequence, mean, logvar)
+                seq = batch[i:i+1]
+                recon, mean, logvar = model(seq)
+                loss = loss_function(recon, seq, mean, logvar)
                 scores.append(float(loss.item()))
 
     if not scores:
         return [], [], None
 
     threshold = float(np.percentile(scores, percentile_threshold))
-    anomaly_indices = [i for i, s in enumerate(scores) if s > threshold]
+    anomalies = [i for i, s in enumerate(scores) if s > threshold]
 
-    return scores, anomaly_indices, threshold
+    return scores, anomalies, threshold
 
 
 # -----------------------------------------------------------------------------
-# foreachBatch function
+# foreachBatch
 # -----------------------------------------------------------------------------
-def run_eval(batch_df, batch_id: int) -> None:
-    """Run LSTM-VAE evaluation on one micro-batch coming from Kafka."""
+def run_eval(batch_df, batch_id):
     if batch_df.count() == 0:
-        logger.info(f"Batch {batch_id} is empty. Skipping evaluation.")
+        logger.info(f"Batch {batch_id} empty, skipping.")
         return
 
-    logger.info(f"Batch {batch_id} RAW SAMPLE (value column)")
-    batch_df.select(col("value").cast("string").alias("raw_value")).show(5, False)
-
-    # -------------------------------------------------------------------------
-    # Parse JSON into columns
-    # -------------------------------------------------------------------------
+    # parse JSON
     cleaned = (
         batch_df
         .select(from_json(col("value").cast("string"), schema).alias("data"))
         .select("data.*")
     )
 
-    # Trim and cast numeric string columns -> DoubleType, treat empty strings as null
     parsed = cleaned
     for c in numeric_cols:
         parsed = parsed.withColumn(
@@ -137,98 +160,54 @@ def run_eval(batch_df, batch_id: int) -> None:
             when(trim(col(c)) == "", None).otherwise(col(c).cast(DoubleType()))
         )
 
-    # Trim timestamp and label
     parsed = (
         parsed.withColumn("Timestamp", trim(col("Timestamp")))
               .withColumn("Normal_Attack", trim(col("Normal_Attack")))
     )
 
-    logger.info(f"Batch {batch_id} PARSED SAMPLE")
-    parsed.show(5, False)
-
-    total = parsed.count()
-    logger.info(f"Parsed rows: {total}")
-    for f in parsed.columns:
-        nulls = parsed.filter(col(f).isNull()).count()
-        logger.info(f"{f}: nulls={nulls}")
-
-    # -------------------------------------------------------------------------
-    # Preprocess and create dataloader
-    # -------------------------------------------------------------------------
     df_pre = preprocess_spark(parsed)
     dataloader = create_dataloader(df_pre, batch_size=32, sequence_length=30)
 
     if dataloader is None:
-        logger.info(
-            f"Batch {batch_id}: not enough data to run inference yet. Skipping."
-        )
+        logger.info(f"Batch {batch_id}: not enough data.")
         return
 
-    df_pre.show(5, False)
-
-    # -------------------------------------------------------------------------
-    # Load model and evaluate (one per batch – small batches so OK)
-    # -------------------------------------------------------------------------
+    # Load model
     model = load_model("weights/lstm_vae_swat.pth", device=device)
-    model.eval()
 
-    scores, anomaly_indices, threshold = compute_anomaly_scores(
-        model, dataloader, device, percentile_threshold=90
+    scores, anomaly_indices, threshold = compute_scores(
+        model, dataloader, device
     )
 
-    logger.info(f"Batch {batch_id} Evaluation")
-    logger.info(f"Anomaly scores (len={len(scores)}), threshold={threshold}")
-    logger.info(f"Anomaly indices: {anomaly_indices}")
+    logger.info(f"BATCH {batch_id} — {len(scores)} scores, threshold={threshold}")
 
-    # -------------------------------------------------------------------------
-    # Build a small batch DataFrame with anomaly scores and flags,
-    # then send it to Kafka topic KAFKA_OUTPUT_TOPIC
-    # -------------------------------------------------------------------------
-    if not scores:
-        logger.info(f"Batch {batch_id}: no scores computed, skipping Kafka output.")
-        return
+    # --------------------------------------------------------------------------
+    # 🔥 PROMETHEUS METRICS UPDATE
+    # --------------------------------------------------------------------------
+    if scores:
+        last_score = scores[-1]
+        is_anomaly = 1 if len(anomaly_indices) > 0 else 0
 
-    records = []
-    anomaly_index_set = set(anomaly_indices)
+        ae_last_anomaly_score.set(last_score)
+        ae_threshold.set(threshold)
+        ae_is_anomaly.set(is_anomaly)
 
-    for idx, score in enumerate(scores):
-        record = {
-            "batch_id": int(batch_id),
-            "sequence_index": int(idx),
-            "anomaly_score": float(score),
-            "is_anomaly": 1 if idx in anomaly_index_set else 0,
-            "threshold": float(threshold) if threshold is not None else None,
-        }
-        records.append(record)
+        if is_anomaly:
+            ae_anomaly_events_total.inc()
 
-    output_df = spark.createDataFrame(records)
+        logger.info(f"Prometheus updated: score={last_score} anom={is_anomaly}")
 
-    # Serialize as JSON for Kafka "value" field
-    kafka_df = output_df.selectExpr("to_json(struct(*)) AS value")
-
-    (
-        kafka_df
-        .write
-        .format("kafka")
-        .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP)
-        .option("topic", KAFKA_OUTPUT_TOPIC)
-        .save()
-    )
-
-    logger.info(
-        f"Batch {batch_id}: sent {len(records)} anomaly-score records to topic "
-        f"{KAFKA_OUTPUT_TOPIC}"
-    )
+    # Kafka output (optional)
+    # ...
 
 
 # -----------------------------------------------------------------------------
-# Start streaming query
+# Start Spark Stream
 # -----------------------------------------------------------------------------
 query = (
     stream_df
     .writeStream
     .foreachBatch(lambda df, batch_id: run_eval(df, batch_id))
-    # .option("checkpointLocation", "checkpoints/mock_consumer")
     .start()
 )
 

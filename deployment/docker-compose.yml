@@ -80,8 +80,7 @@ services:
       context: ..
       dockerfile: explainability/Dockerfile
     container_name: explainability
-    ports:
-      - "9109:9109"
+    
     depends_on:
       - kafka
       - influxdb
@@ -139,6 +138,7 @@ services:
       - icsnet
     ports:
       - "4040:4040"  # Spark UI
+      - "9109:9109"
 
   spark-train:
     build:
