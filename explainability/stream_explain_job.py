@@ -15,12 +15,16 @@ import time
 from typing import List
 
 import pandas as pd
+import threading
+from kafka import KafkaConsumer
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 
 from explainability.features import rolling_features, proxy_anomaly_score
 from explainability.explainer_surrogate import SurrogateExplainer
 from explainability import metrics_exporter
+from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
 # --------------------------------------------------------------------
 # Configuration from environment (same as docker-compose)
@@ -46,6 +50,58 @@ LABEL_COL = "Normal_Attack"          # "Normal" / "Attack" (optional)
 # Global objects (live on the driver for foreachBatch)
 # --------------------------------------------------------------------
 SURROGATE = SurrogateExplainer(n_estimators=200, random_state=42)
+
+# --------------------------------------------------------------------
+# AE anomaly-score Prometheus metrics
+# These will be exposed on the same /metrics endpoint that
+# metrics_exporter.start(PROMETHEUS_PORT) creates.
+# --------------------------------------------------------------------
+ae_anomaly_events_total = Counter(
+    "ae_anomaly_events_total",
+    "Number of anomaly-score messages seen from AE."
+)
+
+ae_last_anomaly_score = Gauge(
+    "ae_last_anomaly_score",
+    "Last anomaly score received from AE (parsed as float if possible)."
+)
+
+
+def consume_ae_scores():
+    """
+    Background Kafka consumer for anomaly scores coming from Spark AE.
+
+    It listens on topic `ics-anomaly-scores` and updates the
+    ae_anomaly_events_total and ae_last_anomaly_score metrics.
+    """
+    try:
+        consumer = KafkaConsumer(
+            "ics-anomaly-scores",
+            bootstrap_servers=[KAFKA_BOOTSTRAP],
+            auto_offset_reset="latest",
+            enable_auto_commit=True,
+            group_id="explainability-ae-consumer",
+            value_deserializer=lambda m: m.decode("utf-8", errors="ignore"),
+        )
+        print("[explainability] [ae-consumer] started, "
+              "listening on topic 'ics-anomaly-scores'")
+    except Exception as exc:
+        print(f"[explainability] [ae-consumer] failed to start KafkaConsumer: {exc}")
+        return
+
+    for msg in consumer:
+        raw = msg.value
+        print(f"[explainability] [ae-consumer] got anomaly-score message: {raw!r}")
+        ae_anomaly_events_total.inc()
+
+        # try to parse the raw value as a float
+        try:
+            score = float(raw)
+        except Exception:
+            score = None
+
+        if score is not None:
+            ae_last_anomaly_score.set(score)
 
 
 def parse_json_batch(pdf: pd.DataFrame) -> pd.DataFrame:
@@ -96,7 +152,7 @@ def process_batch(sdf, batch_id: int):
     """
     start_time = time.perf_counter()
 
-    # DEBUGه
+    # DEBUG: empty batch
     if sdf.rdd.isEmpty():
         print(f"[explainability] [batch {batch_id}] empty batch, skipping.")
         return
@@ -134,7 +190,7 @@ def process_batch(sdf, batch_id: int):
     # Explain the last window
     abs_mean_map, top_pairs = SURROGATE.explain_last(feats, top_k=5)
 
-    # Publish metrics to Prometheus
+    # Publish metrics to Prometheus (SHAP-related)
     metrics_exporter.publish_shap_mean(abs_mean_map)
     metrics_exporter.publish_topk(top_pairs)
 
@@ -144,13 +200,16 @@ def process_batch(sdf, batch_id: int):
 
 
 def main():
-    # DEBUG:  job
+    # DEBUG: job startup
     print("[explainability] starting stream_explain_job")
     print(f"[explainability] KAFKA_BOOTSTRAP={KAFKA_BOOTSTRAP}, topic={KAFKA_TOPIC}")
     print(f"[explainability] Prometheus metrics on port {PROMETHEUS_PORT}")
 
-    # Start metrics HTTP server for Prometheus scraping
+    # Start metrics HTTP server for Prometheus scraping (SHAP metrics + AE metrics)
     metrics_exporter.start(PROMETHEUS_PORT)
+
+    # Start background Kafka consumer for AE anomaly scores
+    threading.Thread(target=consume_ae_scores, daemon=True).start()
 
     # Create Spark session
     spark = (
