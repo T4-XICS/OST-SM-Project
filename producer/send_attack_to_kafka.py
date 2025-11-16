@@ -10,11 +10,16 @@ from collections import deque
 TOPIC_NAME = "ics-sensor-data"
 KAFKA_SERVER = "kafka:9092"
 
-# --- CSV file path (change to your dataset) ---
-if os.path.exists("/app/SWaT_Dataset_Attack_v0_1.csv"):
-    CSV_FILE_PATH = "/app/SWaT_Dataset_Attack_v0_1.csv"  # Docker path
-else:
-    CSV_FILE_PATH = "datasets/swat/attack/SWaT_Dataset_Attack_v0_1.csv"  # Local path
+# CSV path: prefer environment variable
+CSV_FILE_PATH = os.getenv("CSV_FILE_PATH", "/app/SWaT_Dataset_Attack_v0_1.csv")
+# fallback where you might have mounted
+if not os.path.exists(CSV_FILE_PATH):
+    alt = "/app/datasets/swat/attack/SWaT_Dataset_Attack_v0_1.csv"
+    if os.path.exists(alt):
+        CSV_FILE_PATH = alt
+
+# Prometheus metrics port (default 8000)
+METRICS_PORT = int(os.getenv("METRICS_PORT", "8000"))
 
 # --- Prometheus metrics ---
 MESSAGES_SENT = Counter('kafka_messages_sent_total', 'Total number of messages sent to Kafka')
@@ -69,5 +74,6 @@ def stream_rows_to_kafka():
     print("Finished streaming all rows to Kafka.")
 
 if __name__ == "__main__":
-    start_http_server(8001)  # Prometheus metrics
+    start_http_server(METRICS_PORT)  # Prometheus metrics port (container/internal)
     stream_rows_to_kafka()
+

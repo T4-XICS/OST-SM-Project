@@ -140,6 +140,7 @@ services:
       - "8001:8000"  # separate metrics port
     environment:
       - CSV_FILE_PATH=/app/datasets/swat/attack/SWaT_Dataset_Attack_v0_1.csv
+      - METRICS_PORT=8000
     volumes:
       - ./datasets/swat/attack/:/app/datasets/swat/attack/
       
