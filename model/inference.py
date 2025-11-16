@@ -5,6 +5,7 @@ from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 from pyspark.sql.functions import col, from_json, trim, when
 import torch
 from preprocess_data import preprocess_spark, create_dataloader
+from prometheus_client import start_http_server, Gauge
 
 # Configure logging to stdout so Promtail/Loki can scrape it
 SERVICE_NAME = os.getenv("SERVICE_NAME", "spark-consumer")
@@ -13,6 +14,16 @@ logging.basicConfig(
     format=f"%(asctime)s %(levelname)s %(name)s app={SERVICE_NAME} %(message)s",
 )
 logger = logging.getLogger(SERVICE_NAME)
+
+# Gauge for anomalous sensor events
+anomaly_gauge = Gauge(
+    'anomalous_sensor_event',
+    'Detected anomalous sensor event',
+    ['sensor']
+)
+
+start_http_server(8001)
+logger.info("Prometheus metrics server started on port 8001")
 
 spark = (
     SparkSession.builder
@@ -97,6 +108,41 @@ def run_eval(batch_df, batch_id):
 
     logger.info(f"Batch {batch_id} Evaluation")
     logger.info(f"Anomalies: {anomalies}")
+
+    logger.debug(f"Starting Prometheus reporting for batch {batch_id} with {len(anomalies)} anomalies.")
+    if len(anomalies) > 0:
+        try:
+            data = dataloader.dataset
+            for idx in anomalies:
+                if idx < 0 or idx >= len(numeric_cols):
+                    logger.warning(f"Prometheus: Anomaly index {idx} out of range for sensors list.")
+                    continue
+                sensor = numeric_cols[idx]
+                logger.debug(f"Prometheus: Processing anomaly for sensor '{sensor}' (index {idx})")
+                # Find the latest sample in the batch (sequence)
+                # For a typical dataloader, data[-1] is a tensor of shape (sequence_length, num_sensors)
+                # We want the last time step, and the sensor index
+                if hasattr(data, 'iloc'):
+                    tensor_seq = data.iloc[-1]
+                else:
+                    tensor_seq = data[-1]
+                # tensor_seq should be shape (sequence_length, num_sensors)
+                if hasattr(tensor_seq, 'shape') and len(tensor_seq.shape) == 2:
+                    seq_len, num_sensors = tensor_seq.shape
+                    if idx < num_sensors:
+                        value = tensor_seq[-1, idx].item()
+                        logger.debug(f"Prometheus: Sensor {sensor}, value: {value}")
+                        if value is not None:
+                            anomaly_gauge.labels(sensor=sensor).set(value)
+                            logger.info(f"Prometheus metric set: anomalous_sensor_event{{sensor='{sensor}'}} = {value}")
+        except Exception as e:
+            logger.error(f"Prometheus reporting failed: {e}")
+    else:
+        logger.debug(f"Prometheus: No anomalies detected, resetting all gauges to 0.")
+        # Reset all gauges to 0 if there is no anomaly
+        for sensor in numeric_cols:
+            anomaly_gauge.labels(sensor=sensor).set(0)
+            logger.info(f"Prometheus metric reset: anomalous_sensor_event{{sensor='{sensor}'}} = 0")
 
 query = (
     stream_df
