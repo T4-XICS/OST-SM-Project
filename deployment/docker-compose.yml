@@ -187,6 +187,8 @@ services:
     ports:
       - "4040:4040"  # Spark UI
       - "8001:8001"  # Prometheus endpoint
+    volumes:
+      - ../model/weights:/weights
     labels:
       - "logging=promtail"
       - "app=spark-consumer"
