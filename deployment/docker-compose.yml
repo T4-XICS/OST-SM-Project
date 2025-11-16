@@ -126,6 +126,22 @@ services:
     ports:
       - "8000:8000"
 
+  attack-producer:
+    build:
+      context: ../
+      dockerfile: producer/Dockerfile
+    container_name: attack-producer
+    depends_on:
+      - kafka
+    restart: on-failure
+    networks:
+      - icsnet
+    ports:
+      - "8001:8000"  # separate metrics port
+    environment:
+      - CSV_FILE_PATH=/app/datasets/swat/attack/SWaT_Dataset_Attack_v0_1.csv
+    volumes:
+      - ./datasets/swat/attack/:/app/datasets/swat/attack/
       
   kafka-to-influx:
     build:
