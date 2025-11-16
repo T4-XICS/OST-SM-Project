@@ -1,5 +1,7 @@
 import logging
 import os
+import threading
+import time
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 from pyspark.sql.functions import col, from_json, trim, when
@@ -61,6 +63,55 @@ from evaluate import evaluate_lstm
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
+model_lock = threading.Lock()
+current_model = None
+model_path = "/weights/lstm_vae_swat.pth"
+last_modified_time = None
+
+def load_model_safe():
+    global current_model, last_modified_time
+    try:
+        if not os.path.exists(model_path):
+            logger.warning(f"Model path {model_path} does not exist yet.")
+            return
+        logger.info(f"Loading model from {model_path}")
+        with model_lock:
+            current_model = load_model(model_path, device=device)
+            current_model.eval()
+            last_modified_time = os.path.getmtime(model_path)
+            logger.info(f"Model loaded successfully. Last modified: {last_modified_time}")
+    except Exception as e:
+        logger.error(f"Failed to load model: {e}")
+
+def check_and_reload_model():
+    global last_modified_time
+    try:
+        if not os.path.exists(model_path):
+            return
+        
+        current_mtime = os.path.getmtime(model_path)
+        if last_modified_time is None or current_mtime > last_modified_time:
+            logger.info(f"Model weights updated (mtime: {current_mtime}). Reloading model...")
+            load_model_safe()
+        else:
+            logger.info("Model weights have not changed; no reload needed.")
+    except Exception as e:
+        logger.error(f"Error checking model file: {e}")
+
+def model_reload_worker(check_interval=60):
+    logger.info(f"Model reload worker started. Check interval: {check_interval}s")
+    while True:
+        time.sleep(check_interval)
+        check_and_reload_model()
+
+load_model_safe()
+
+# Start background thread for periodic model reloading
+reload_thread = threading.Thread(target=model_reload_worker, args=(60,), daemon=True)
+reload_thread.start()
+logger.info("Model auto-reload thread started")
+
+
 def run_eval(batch_df, batch_id):
     if batch_df.count() == 0:
         logger.info(f"Batch {batch_id} is empty. Skipping evaluation.")
@@ -100,11 +151,14 @@ def run_eval(batch_df, batch_id):
 
     df_pre.show(5, False)
 
-    model = load_model("weights/lstm_vae_swat.pth", device=device)
-    model.eval()
+    with model_lock:
+        if current_model is None:
+            logger.warning(f"Batch {batch_id}: Model not loaded yet. Skipping evaluation.")
+            return
+        model_to_use = current_model
 
     # Evaluate
-    anomalies = evaluate_lstm(model, dataloader, device, 90)
+    anomalies = evaluate_lstm(model_to_use, dataloader, device, 90)
 
     logger.info(f"Batch {batch_id} Evaluation")
     logger.info(f"Anomalies: {anomalies}")

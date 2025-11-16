@@ -20,8 +20,6 @@ COPY --from=spark-base /opt/spark /opt/spark
 COPY requirements.txt .
 RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
 
-COPY weights/ weights/
-
 ADD *.py .
 
 ENV PYTHONUNBUFFERED=1
