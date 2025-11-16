@@ -31,10 +31,12 @@ def stream_rows_to_kafka():
     )
 
     recent_times = deque(maxlen=10)  # For data rate calculation
+    rate = 0.0  # initialize rate for first row
 
     with open(CSV_FILE_PATH, "r", encoding="utf-8-sig") as file:
         reader = csv.DictReader(file)
         for i, row in enumerate(reader, start=1):
+            
             # Detect if row is attack
             label_column = row.get("Normal_Attack") or row.get("Label") or row.get("Attack") or ""
             is_attack = str(label_column).strip().lower() == "attack"
@@ -67,5 +69,5 @@ def stream_rows_to_kafka():
     print("Finished streaming all rows to Kafka.")
 
 if __name__ == "__main__":
-    start_http_server(8000)  # Prometheus metrics
+    start_http_server(8001)  # Prometheus metrics
     stream_rows_to_kafka()
