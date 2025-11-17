@@ -77,11 +77,6 @@ def _last_rows_from_sequences(sequences):
         else:
             yield arr[-1]
 
-def _reset_explanation_metrics():
-    for method in ("shap", "lime"):
-        for sensor in numeric_cols:
-            explanation_gauge.labels(method=method, sensor=sensor).set(0)
-
 def _update_explanation_metrics(model, dataset, anomalies):
     if not anomalies:
         _reset_explanation_metrics()
