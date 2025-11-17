@@ -20,3 +20,6 @@ threadpoolctl==3.6.0
 typing_extensions==4.15.0
 prometheus_client==0.23.1
 tzdata==2025.2
+shap==0.46.0
+lime==0.2.0.1
+numba==0.60.0

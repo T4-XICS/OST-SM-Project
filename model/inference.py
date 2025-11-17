@@ -2,12 +2,16 @@ import logging
 import os
 import threading
 import time
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType
-from pyspark.sql.functions import col, from_json, trim, when
+
+import numpy as np
 import torch
-from preprocess_data import preprocess_spark, create_dataloader
-from prometheus_client import start_http_server, Gauge
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, from_json, trim, when
+from pyspark.sql.types import DoubleType, StringType, StructField, StructType
+from prometheus_client import Gauge, start_http_server
+
+from explainability_engine import ExplainabilityEngine
+from preprocess_data import create_dataloader, preprocess_spark
 
 # Configure logging to stdout so Promtail/Loki can scrape it
 SERVICE_NAME = os.getenv("SERVICE_NAME", "spark-consumer")
@@ -16,12 +20,19 @@ logging.basicConfig(
     format=f"%(asctime)s %(levelname)s %(name)s app={SERVICE_NAME} %(message)s",
 )
 logger = logging.getLogger(SERVICE_NAME)
+SEQUENCE_LENGTH = int(os.getenv("SEQUENCE_LENGTH", "30"))
 
 # Gauge for anomalous sensor events
 anomaly_gauge = Gauge(
     'anomalous_sensor_event',
     'Detected anomalous sensor event',
     ['sensor']
+)
+
+explanation_gauge = Gauge(
+    'feature_explanation_weight',
+    'Relative feature contribution from explainability module',
+    ['method', 'sensor']
 )
 
 start_http_server(8001)
@@ -47,6 +58,78 @@ all_fields = [
 
 schema = StructType([StructField(f, StringType(), True) for f in all_fields])
 numeric_cols = [c for c in all_fields if c not in ("Timestamp", "Normal_Attack")]
+
+explainability_engine = ExplainabilityEngine(
+    feature_names=numeric_cols,
+    sequence_length=SEQUENCE_LENGTH,
+)
+_reset_explanation_metrics()
+
+def _last_rows_from_sequences(sequences):
+    for seq in sequences:
+        if seq is None:
+            continue
+        arr = np.asarray(seq)
+        if arr.ndim == 0:
+            continue
+        if arr.ndim == 1:
+            yield arr
+        else:
+            yield arr[-1]
+
+def _reset_explanation_metrics():
+    for method in ("shap", "lime"):
+        for sensor in numeric_cols:
+            explanation_gauge.labels(method=method, sensor=sensor).set(0)
+
+def _update_explanation_metrics(model, dataset, anomalies):
+    if not anomalies:
+        _reset_explanation_metrics()
+        return
+
+    shap_totals = {}
+    lime_totals = {}
+    shap_count = 0
+    lime_count = 0
+
+    for idx in anomalies:
+        if idx < 0 or idx >= len(dataset):
+            logger.warning(f"Explainability: anomaly index {idx} is out of range for dataset of size {len(dataset)}")
+            continue
+
+        seq = np.asarray(dataset[idx])
+        sample = seq[-1] if seq.ndim == 2 else seq
+        explanations = explainability_engine.generate(model, device, sample)
+
+        shap_values = explanations.get("shap")
+        if shap_values:
+            shap_abs_total = sum(abs(v) for v in shap_values.values())
+            if shap_abs_total > 0:
+                for sensor, value in shap_values.items():
+                    shap_totals[sensor] = shap_totals.get(sensor, 0.0) + abs(value) / shap_abs_total
+                shap_count += 1
+
+        lime_values = explanations.get("lime")
+        if lime_values:
+            lime_abs_total = sum(abs(v) for v in lime_values.values())
+            if lime_abs_total > 0:
+                for sensor, value in lime_values.items():
+                    lime_totals[sensor] = lime_totals.get(sensor, 0.0) + abs(value) / lime_abs_total
+                lime_count += 1
+
+    if shap_count > 0:
+        for sensor, value in shap_totals.items():
+            explanation_gauge.labels(method="shap", sensor=sensor).set(value / shap_count)
+    else:
+        for sensor in numeric_cols:
+            explanation_gauge.labels(method="shap", sensor=sensor).set(0)
+
+    if lime_count > 0:
+        for sensor, value in lime_totals.items():
+            explanation_gauge.labels(method="lime", sensor=sensor).set(value / lime_count)
+    else:
+        for sensor in numeric_cols:
+            explanation_gauge.labels(method="lime", sensor=sensor).set(0)
 
 stream_df = (
     spark.readStream
@@ -143,13 +226,19 @@ def run_eval(batch_df, batch_id):
 
     # only then preprocess and create dataloader
     df_pre = preprocess_spark(parsed)
-    dataloader = create_dataloader(df_pre, batch_size=32, sequence_length=30)
+    dataloader = create_dataloader(df_pre, batch_size=32, sequence_length=SEQUENCE_LENGTH)
 
     if dataloader is None:
         logger.info(f"Batch {batch_id}: not enough data to run inference yet. Skipping.")
         return
 
     df_pre.show(5, False)
+
+    if hasattr(dataloader, "dataset"):
+        dataset_sequences = list(dataloader.dataset)
+        explainability_engine.add_background_rows(_last_rows_from_sequences(dataset_sequences))
+    else:
+        dataset_sequences = []
 
     with model_lock:
         if current_model is None:
@@ -163,10 +252,12 @@ def run_eval(batch_df, batch_id):
     logger.info(f"Batch {batch_id} Evaluation")
     logger.info(f"Anomalies: {anomalies}")
 
+    _update_explanation_metrics(model_to_use, dataset_sequences, anomalies)
+
     logger.debug(f"Starting Prometheus reporting for batch {batch_id} with {len(anomalies)} anomalies.")
     if len(anomalies) > 0:
         try:
-            data = dataloader.dataset
+            data = dataset_sequences if dataset_sequences else dataloader.dataset
             for idx in anomalies:
                 if idx < 0 or idx >= len(numeric_cols):
                     logger.warning(f"Prometheus: Anomaly index {idx} out of range for sensors list.")
