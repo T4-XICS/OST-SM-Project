@@ -41,6 +41,12 @@ ae_last_anomaly_score = Gauge(
     "Last anomaly score from LSTM-VAE"
 )
 
+anomaly_gauge = Gauge(
+    'anomalous_sensor_event',
+    'Detected anomalous sensor event',
+    ['sensor']
+)
+
 ae_threshold = Gauge(
     "ae_threshold",
     "Threshold used for anomaly detection"
@@ -118,7 +124,7 @@ stream_df = (
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
-
+from evaluate import evaluate_lstm
 # -----------------------------------------------------------------------------
 # Evaluation Function
 # -----------------------------------------------------------------------------
