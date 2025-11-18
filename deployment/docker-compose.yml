@@ -142,7 +142,7 @@ services:
       - CSV_FILE_PATH=/app/datasets/swat/attack/SWaT_Dataset_Attack_v0_1.csv
       - METRICS_PORT=8000
     volumes:
-      - ./datasets/swat/attack/:/app/datasets/swat/attack/
+      - ../datasets/swat/attack/:/app/datasets/swat/attack/
       
   kafka-to-influx:
     build:
