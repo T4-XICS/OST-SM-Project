@@ -10,13 +10,8 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 from pyspark.sql.functions import col, from_json, trim, when
 import time
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType
-from pyspark.sql.functions import col, from_json, trim, when
 from preprocess_data import preprocess_spark, create_dataloader
-from prometheus_client import start_http_server, Gauge
 
-from preprocess_data import preprocess_spark, create_dataloader
 from network import LSTMVAE, load_model, loss_function
 
 
