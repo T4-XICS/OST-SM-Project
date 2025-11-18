@@ -11,10 +11,17 @@ TOPIC_NAME = "ics-sensor-data"
 KAFKA_SERVER = "kafka:9092"  # When running in Docker
 
 # Detect correct CSV path (works both locally and in Docker)
-if os.path.exists("/app/SWaT_Dataset_Normal_v0_1.csv"):
-    CSV_FILE_PATH = "/app/SWaT_Dataset_Normal_v0_1.csv"  # Docker path
-else:
-    CSV_FILE_PATH = "datasets/swat/normal/SWaT_Dataset_Normal_v0_1.csv"  # Local path
+# First check if environment variable is set (for attack-producer)
+CSV_FILE_PATH = os.getenv("CSV_FILE_PATH")
+
+if not CSV_FILE_PATH:
+    # Auto-detect based on available files
+    if os.path.exists("/app/SWaT_Dataset_Normal_v0_1.csv"):
+        CSV_FILE_PATH = "/app/SWaT_Dataset_Normal_v0_1.csv"  # Docker path
+    else:
+        CSV_FILE_PATH = "datasets/swat/normal/SWaT_Dataset_Normal_v0_1.csv"  # Local path
+
+print(f"Using CSV file: {CSV_FILE_PATH}")
 
 # Basic producer performance metrics
 MESSAGES_SENT = Counter('kafka_messages_sent_total', 'Total number of messages sent to Kafka')

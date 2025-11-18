@@ -13,8 +13,8 @@ from typing import Optional
 # Using InfluxDB 2.x configuration (from write_kafka_to_influx.py)
 INFLUX_ORG = "ucs"
 INFLUX_URL = "http://localhost:8086"
-INFLUX_TOKEN = "QxzNbxYC3mh15AOYK5e1rweiLzHsS9WqlCDvZ9VTRdTcvVO3gbp2FexttgNzwecf06BdA5On8SSPu6Ky1UBDXQ=="
-INFLUX_BUCKET = "swat_db"
+INFLUX_TOKEN = "admintoken123"
+INFLUX_BUCKET = "swat_db"  # Change to "prometheus" to check prometheus metrics
 
 
 def query_swat_data(
