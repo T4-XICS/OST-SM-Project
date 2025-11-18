@@ -13,11 +13,18 @@ scrape_configs:
       - targets: ['producer:8000']
 
   # ----------- LSTM-VAE anomaly metrics (spark-consumer) -----------
-  - job_name: 'spark-consumer-metrics'
-    static_configs:
-      - targets: ['spark-consumer:9109']
+  # - job_name: 'spark-consumer-metrics'
+  #   static_configs:
+  #     - targets: ['spark-consumer:9109']
 
   # ----------- SHAP + surrogate metrics (explainability) -----------
   - job_name: 'explainability-metrics'
     static_configs:
       - targets: ['explainability:9109']
+
+  - job_name: 'spark-consumer-inference'
+    static_configs:
+      - targets: ['spark-consumer:8001']
+      
+remote_write:
+  - url: "http://influxdb:8086/api/v2/write?org=ics-org&bucket=ics&token=admintoken123"

@@ -110,6 +110,24 @@ services:
     ports:
       - "8000:8000"
 
+  attack-producer:
+    build:
+      context: ../
+      dockerfile: producer/Dockerfile
+    container_name: attack-producer
+    depends_on:
+      - kafka
+    restart: on-failure
+    networks:
+      - icsnet
+    ports:
+      - "8002:8000"  # separate metrics port
+    environment:
+      - CSV_FILE_PATH=/app/datasets/swat/attack/SWaT_Dataset_Attack_v0_1.csv
+      - METRICS_PORT=8000
+    volumes:
+      - ./datasets/swat/attack/:/app/datasets/swat/attack/
+      
   kafka-to-influx:
     build:
       context: ../
@@ -140,7 +158,12 @@ services:
       - icsnet
     ports:
       - "4040:4040"  # Spark UI
-      - "9109:9109"
+      - "8001:8001"  # Prometheus endpoint
+    volumes:
+      - ../model/weights:/weights
+    labels:
+      - "logging=promtail"
+      - "app=spark-consumer"
 
   spark-train:
     build:

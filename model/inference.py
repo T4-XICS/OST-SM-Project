@@ -9,6 +9,12 @@ from prometheus_client import start_http_server, Gauge, Counter
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 from pyspark.sql.functions import col, from_json, trim, when
+import time
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType
+from pyspark.sql.functions import col, from_json, trim, when
+from preprocess_data import preprocess_spark, create_dataloader
+from prometheus_client import start_http_server, Gauge
 
 from preprocess_data import preprocess_spark, create_dataloader
 from network import LSTMVAE, load_model, loss_function
@@ -141,6 +147,55 @@ def compute_scores(model, dataloader, device, percentile_threshold=90):
 # -----------------------------------------------------------------------------
 # foreachBatch
 # -----------------------------------------------------------------------------
+model_lock = threading.Lock()
+current_model = None
+model_path = "/weights/lstm_vae_swat.pth"
+last_modified_time = None
+
+def load_model_safe():
+    global current_model, last_modified_time
+    try:
+        if not os.path.exists(model_path):
+            logger.warning(f"Model path {model_path} does not exist yet.")
+            return
+        logger.info(f"Loading model from {model_path}")
+        with model_lock:
+            current_model = load_model(model_path, device=device)
+            current_model.eval()
+            last_modified_time = os.path.getmtime(model_path)
+            logger.info(f"Model loaded successfully. Last modified: {last_modified_time}")
+    except Exception as e:
+        logger.error(f"Failed to load model: {e}")
+
+def check_and_reload_model():
+    global last_modified_time
+    try:
+        if not os.path.exists(model_path):
+            return
+        
+        current_mtime = os.path.getmtime(model_path)
+        if last_modified_time is None or current_mtime > last_modified_time:
+            logger.info(f"Model weights updated (mtime: {current_mtime}). Reloading model...")
+            load_model_safe()
+        else:
+            logger.info("Model weights have not changed; no reload needed.")
+    except Exception as e:
+        logger.error(f"Error checking model file: {e}")
+
+def model_reload_worker(check_interval=60):
+    logger.info(f"Model reload worker started. Check interval: {check_interval}s")
+    while True:
+        time.sleep(check_interval)
+        check_and_reload_model()
+
+load_model_safe()
+
+# Start background thread for periodic model reloading
+reload_thread = threading.Thread(target=model_reload_worker, args=(60,), daemon=True)
+reload_thread.start()
+logger.info("Model auto-reload thread started")
+
+
 def run_eval(batch_df, batch_id):
     if batch_df.count() == 0:
         logger.info(f"Batch {batch_id} empty, skipping.")
@@ -178,6 +233,16 @@ def run_eval(batch_df, batch_id):
     scores, anomaly_indices, threshold = compute_scores(
         model, dataloader, device
     )
+    df_pre.show(5, False)
+
+    with model_lock:
+        if current_model is None:
+            logger.warning(f"Batch {batch_id}: Model not loaded yet. Skipping evaluation.")
+            return
+        model_to_use = current_model
+
+    # Evaluate
+    anomalies = evaluate_lstm(model_to_use, dataloader, device, 90)
 
     logger.info(f"BATCH {batch_id} — {len(scores)} scores, threshold={threshold}")
 
@@ -204,6 +269,41 @@ def run_eval(batch_df, batch_id):
 # -----------------------------------------------------------------------------
 # Start Spark Stream
 # -----------------------------------------------------------------------------
+    logger.debug(f"Starting Prometheus reporting for batch {batch_id} with {len(anomalies)} anomalies.")
+    if len(anomalies) > 0:
+        try:
+            data = dataloader.dataset
+            for idx in anomalies:
+                if idx < 0 or idx >= len(numeric_cols):
+                    logger.warning(f"Prometheus: Anomaly index {idx} out of range for sensors list.")
+                    continue
+                sensor = numeric_cols[idx]
+                logger.debug(f"Prometheus: Processing anomaly for sensor '{sensor}' (index {idx})")
+                # Find the latest sample in the batch (sequence)
+                # For a typical dataloader, data[-1] is a tensor of shape (sequence_length, num_sensors)
+                # We want the last time step, and the sensor index
+                if hasattr(data, 'iloc'):
+                    tensor_seq = data.iloc[-1]
+                else:
+                    tensor_seq = data[-1]
+                # tensor_seq should be shape (sequence_length, num_sensors)
+                if hasattr(tensor_seq, 'shape') and len(tensor_seq.shape) == 2:
+                    seq_len, num_sensors = tensor_seq.shape
+                    if idx < num_sensors:
+                        value = tensor_seq[-1, idx].item()
+                        logger.debug(f"Prometheus: Sensor {sensor}, value: {value}")
+                        if value is not None:
+                            anomaly_gauge.labels(sensor=sensor).set(value)
+                            logger.info(f"Prometheus metric set: anomalous_sensor_event{{sensor='{sensor}'}} = {value}")
+        except Exception as e:
+            logger.error(f"Prometheus reporting failed: {e}")
+    else:
+        logger.debug(f"Prometheus: No anomalies detected, resetting all gauges to 0.")
+        # Reset all gauges to 0 if there is no anomaly
+        for sensor in numeric_cols:
+            anomaly_gauge.labels(sensor=sensor).set(0)
+            logger.info(f"Prometheus metric reset: anomalous_sensor_event{{sensor='{sensor}'}} = 0")
+
 query = (
     stream_df
     .writeStream
