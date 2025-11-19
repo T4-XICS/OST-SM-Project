@@ -205,3 +205,19 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+model/weights/*.pth
+*.pt
+
+# local dev
+.venv/
+__pycache__/
+*.pyc
+.env
+*.log
+# datasets
+*.csv
+datasets/**
+# notebooks junk
+.ipynb_checkpoints/
+#soma
+model/weights/*.pth
