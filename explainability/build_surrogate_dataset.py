@@ -1,75 +1,42 @@
-"""
-build_surrogate_dataset.py
-
-Goal:
-    - Load a SWaT CSV file (normal or attack, offline).
-    - Run the LSTM-VAE model on it.
-    - For each sample, compute an anomaly score (reconstruction loss).
-    - Save a new CSV that contains:
-        original features + model_score column.
-
-Later we will use this CSV to train a surrogate tree model + SHAP.
-"""
+# explainability/build_surrogate_dataset.py
+#
+# Offline script to build a surrogate-training dataset for SWaT
+# using the LSTM-VAE anomaly scores as features.
 
 import os
 import sys
+from pathlib import Path
+from typing import Tuple, List
+
 import numpy as np
 import pandas as pd
 import torch
 
-# --------------------------------------------------------------------------
-# 1) Make sure we can import from the model folder
-# --------------------------------------------------------------------------
-THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.abspath(os.path.join(THIS_DIR, ".."))
-MODEL_DIR = os.path.join(REPO_ROOT, "model")
+# -----------------------------------------------------------------------------
+# Paths
+# -----------------------------------------------------------------------------
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
-if MODEL_DIR not in sys.path:
-    sys.path.insert(0, MODEL_DIR)
+# SWaT CSVs (normal + attack)
+NORMAL_CSV = REPO_ROOT / "datasets" / "swat" / "normal" / "SWaT_Dataset_Normal_v0_1.csv"
+ATTACK_CSV = REPO_ROOT / "datasets" / "swat" / "attack" / "SWaT_Dataset_Attack_v0_1.csv"
 
-# imports from model code (same as in inference.py)
-from network import LSTMVAE, load_model, loss_function  # type: ignore
+# LSTM-VAE weights (same file inference.py uses)
+MODEL_WEIGHTS = REPO_ROOT / "model" / "weights" / "lstm_vae_swat.pth"
 
-# if you have a preprocessing module, we can import it later
-# from preprocess_data import preprocess_offline   # TODO: if it exists
+# Output surrogate dataset
+OUT_CSV = REPO_ROOT / "explainability" / "swat_surrogate.csv"
 
-
-# --------------------------------------------------------------------------
-# 2) CONFIG – ***YOU MAY NEED TO ADJUST THESE PATHS***
-# --------------------------------------------------------------------------
-# Guess for the normal SWaT dataset path – we will fix it if it is wrong.
-INPUT_CSV = os.path.join(
-    REPO_ROOT,
-    "datasets",
-    "swat",
-    "normal",
-    "SWaT_Dataset_Normal_v1.csv",  # <-- change if your file has another name
-)
-
-# Where to save the surrogate training data
-OUTPUT_CSV = os.path.join(
-    REPO_ROOT,
-    "explainability",
-    "surrogate_training_data.csv",
-)
-
-# LSTM-VAE weights (same file that inference.py uses)
-MODEL_WEIGHTS = os.path.join(
-    REPO_ROOT,
-    "model",
-    "weights",
-    "lstm_vae_swat.pth",
-)
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Make sure we can import from model/
+sys.path.insert(0, str(REPO_ROOT / "model"))
+from network import load_model, loss_function  # type: ignore
 
 
-# --------------------------------------------------------------------------
-# 3) Helper: load CSV and basic numeric preprocessing
-#    (simple version, we can make it smarter later)
-# --------------------------------------------------------------------------
-def load_raw_swat(csv_path: str) -> pd.DataFrame:
-    if not os.path.exists(csv_path):
+# -----------------------------------------------------------------------------
+# 1. Load and basic preprocess SWaT CSV
+# -----------------------------------------------------------------------------
+def load_raw_swat(csv_path: Path) -> pd.DataFrame:
+    if not csv_path.exists():
         raise FileNotFoundError(f"CSV not found: {csv_path}")
 
     df = pd.read_csv(csv_path)
@@ -82,80 +49,162 @@ def load_raw_swat(csv_path: str) -> pd.DataFrame:
     # Keep only numeric columns
     df = df.select_dtypes(include=["number"]).copy()
 
-    # Simple normalization (z-score) – same kind of scaling the AE expects
+    # Simple normalization (z-score) – similar scale as the AE expects
     df = (df - df.mean()) / (df.std() + 1e-8)
 
+    # Replace NaN/inf with 0
     df = df.replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
     return df
 
 
-# --------------------------------------------------------------------------
-# 4) Build sequences for LSTM-VAE
-# --------------------------------------------------------------------------
-def build_sequences(data: np.ndarray, seq_len: int = 30) -> np.ndarray:
+# -----------------------------------------------------------------------------
+# 2. Make sliding windows (sequences) for LSTM-VAE
+# -----------------------------------------------------------------------------
+def make_sequences(
+    df: pd.DataFrame,
+    seq_len: int = 30,
+) -> Tuple[np.ndarray, np.ndarray]:
     """
-    data: shape (N, D)
-    returns: shape (num_seqs, seq_len, D)
+    Build overlapping sequences of length seq_len.
+
+    Returns:
+        sequences: (num_seq, seq_len, num_features)
+        last_steps: (num_seq, num_features)  # last row of each window
     """
-    sequences = []
-    for i in range(len(data) - seq_len + 1):
-        seq = data[i : i + seq_len]
-        sequences.append(seq)
-    return np.stack(sequences, axis=0)
+    values = df.values.astype(np.float32)
+    num_rows, num_features = values.shape
+
+    if num_rows <= seq_len:
+        raise ValueError(
+            f"Not enough rows ({num_rows}) for sequence length {seq_len}"
+        )
+
+    sequences: List[np.ndarray] = []
+    last_steps: List[np.ndarray] = []
+
+    for start in range(0, num_rows - seq_len + 1):
+        window = values[start : start + seq_len, :]
+        sequences.append(window)
+        last_steps.append(window[-1])
+
+    sequences_arr = np.stack(sequences)  # (N, seq_len, F)
+    last_steps_arr = np.stack(last_steps)  # (N, F)
+
+    return sequences_arr, last_steps_arr
 
 
-# --------------------------------------------------------------------------
-# 5) Compute anomaly scores with the LSTM-VAE
-# --------------------------------------------------------------------------
-def compute_scores(model: LSTMVAE, sequences: np.ndarray) -> np.ndarray:
+# -----------------------------------------------------------------------------
+# 3. Compute anomaly scores with LSTM-VAE
+# -----------------------------------------------------------------------------
+def compute_lstm_scores(
+    model: torch.nn.Module,
+    sequences: np.ndarray,
+    device: torch.device,
+    batch_size: int = 512,
+) -> List[float]:
+    """
+    sequences: (num_seq, seq_len, num_features)
+    Returns one anomaly score (reconstruction loss) per sequence.
+    Uses batching for speed.
+    """
     model.eval()
-    scores = []
+    scores: List[float] = []
 
     with torch.no_grad():
-        for i in range(sequences.shape[0]):
-            seq = sequences[i : i + 1]  # shape (1, T, D)
-            x = torch.tensor(seq, dtype=torch.float32, device=DEVICE)
-            recon, mean, logvar = model(x)
-            loss = loss_function(recon, x, mean, logvar)
-            scores.append(float(loss.item()))
+        tensor = torch.tensor(sequences, dtype=torch.float32).to(device)
+        num_seq = tensor.shape[0]
 
-    return np.array(scores)
+        for start in range(0, num_seq, batch_size):
+            end = min(start + batch_size, num_seq)
+            batch = tensor[start:end]  # shape (B, seq_len, F)
+
+            recon, mean, logvar = model(batch)
+
+            batch_losses = loss_function(recon, batch, mean, logvar)
+
+        
+            if isinstance(batch_losses, torch.Tensor) and batch_losses.ndim == 0:
+                batch_losses = batch_losses.repeat(batch.shape[0])
+
+            for l in batch_losses:
+                scores.append(float(l.item()))
+
+    return scores
 
 
-def main():
-    print(">>> Loading data from:", INPUT_CSV)
-    df = load_raw_swat(INPUT_CSV)
-    print("    Raw shape:", df.shape)
 
-    data = df.to_numpy().astype("float32")
+# -----------------------------------------------------------------------------
+# 4. Build surrogate features for a single CSV
+# -----------------------------------------------------------------------------
+def build_surrogate_for_csv(
+    csv_path: Path,
+    label: int,
+    model: torch.nn.Module,
+    device: torch.device,
+    seq_len: int = 30,
+) -> pd.DataFrame:
+    """
+    - Loads and preprocesses raw SWaT CSV
+    - Builds sequences
+    - Runs LSTM-VAE to get anomaly scores
+    - Builds a tabular dataset: last-step features + lstm_score + label
+    """
+    print(f"[+] Loading and preprocessing: {csv_path}")
+    df_raw = load_raw_swat(csv_path)
 
-    print(">>> Building sequences for LSTM-VAE...")
-    sequences = build_sequences(data, seq_len=30)
-    print("    Sequences shape:", sequences.shape)
+    print(f"    Raw shape after preprocess: {df_raw.shape}")
+    sequences, last_steps = make_sequences(df_raw, seq_len=seq_len)
+    print(f"    Num sequences: {sequences.shape[0]}")
 
-    print(">>> Loading LSTM-VAE model from:", MODEL_WEIGHTS)
-    if not os.path.exists(MODEL_WEIGHTS):
+    scores = compute_lstm_scores(model, sequences, device)
+    if len(scores) != last_steps.shape[0]:
+        raise RuntimeError("Scores and features length mismatch")
+
+    # Tabular features = last step of each sequence
+    out_df = pd.DataFrame(last_steps, columns=df_raw.columns)
+    out_df["lstm_score"] = scores
+    out_df["label"] = label
+
+    return out_df
+
+
+# -----------------------------------------------------------------------------
+# 5. Main
+# -----------------------------------------------------------------------------
+def main() -> None:
+    print("=== Building SWaT surrogate dataset using LSTM-VAE ===")
+    print(f"Repository root : {REPO_ROOT}")
+    print(f"Normal CSV      : {NORMAL_CSV}")
+    print(f"Attack CSV      : {ATTACK_CSV}")
+    print(f"Model weights   : {MODEL_WEIGHTS}")
+    print(f"Output CSV      : {OUT_CSV}")
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device    : {device}")
+
+    if not MODEL_WEIGHTS.exists():
         raise FileNotFoundError(f"Model weights not found: {MODEL_WEIGHTS}")
 
-    model = load_model(MODEL_WEIGHTS, device=DEVICE)
-    model.to(DEVICE)
+    print("[+] Loading LSTM-VAE model...")
+    model = load_model(str(MODEL_WEIGHTS), device=device)
+    model.eval()
+    print("[+] Model loaded.")
 
-    print(">>> Computing anomaly scores...")
-    scores = compute_scores(model, sequences)
-    print("    Scores shape:", scores.shape)
+    # Build surrogate features for each class
+    df_normal = build_surrogate_for_csv(NORMAL_CSV, label=0, model=model, device=device)
+    df_attack = build_surrogate_for_csv(ATTACK_CSV, label=1, model=model, device=device)
 
-    # We align features with the *last* time step of each sequence
-    # so that we have a per-time-step feature vector + one score.
-    aligned_features = data[29:]  # drop first 29 rows so lengths match
-    assert aligned_features.shape[0] == scores.shape[0]
+    # Combine & shuffle
+    surrogate_df = pd.concat([df_normal, df_attack], ignore_index=True)
+    surrogate_df = surrogate_df.sample(frac=1.0, random_state=42).reset_index(drop=True)
 
-    out_df = pd.DataFrame(aligned_features, columns=df.columns)
-    out_df["model_score"] = scores
+    OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
+    surrogate_df.to_csv(OUT_CSV, index=False)
 
-    print(">>> Saving surrogate training data to:", OUTPUT_CSV)
-    out_df.to_csv(OUTPUT_CSV, index=False)
-    print("Done.")
+    print(f"\n[✓] Surrogate dataset saved to: {OUT_CSV}")
+    print(f"[✓] Final shape: {surrogate_df.shape}")
+    print("[✓] Columns:", list(surrogate_df.columns))
 
 
 if __name__ == "__main__":
