@@ -134,7 +134,6 @@ stream_df = (
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
-<<<<<<< HEAD
 from evaluate import evaluate_lstm
 # -----------------------------------------------------------------------------
 # Evaluation Function
@@ -164,8 +163,6 @@ def compute_scores(model, dataloader, device, percentile_threshold=90):
 # -----------------------------------------------------------------------------
 # foreachBatch
 # -----------------------------------------------------------------------------
-=======
->>>>>>> origin/main
 model_lock = threading.Lock()
 current_model = None
 model_path = "/weights/lstm_vae_swat.pth"

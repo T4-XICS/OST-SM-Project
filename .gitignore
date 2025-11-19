@@ -219,4 +219,5 @@ __pycache__/
 datasets/**
 # notebooks junk
 .ipynb_checkpoints/
+#soma
 model/weights/*.pth
