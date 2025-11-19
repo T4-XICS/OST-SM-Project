@@ -12,6 +12,7 @@ scrape_configs:
     static_configs:
       - targets: ['producer:8000']
 
+<<<<<<< HEAD
   # ----------- LSTM-VAE anomaly metrics (spark-consumer) -----------
   # - job_name: 'spark-consumer-metrics'
   #   static_configs:
@@ -22,6 +23,8 @@ scrape_configs:
     static_configs:
       - targets: ['explainability:9109']
 
+=======
+>>>>>>> origin/main
   - job_name: 'spark-consumer-inference'
     static_configs:
       - targets: ['spark-consumer:8001']

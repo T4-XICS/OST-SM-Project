@@ -80,7 +80,6 @@ services:
       context: ..
       dockerfile: explainability/Dockerfile
     container_name: explainability
-    
     depends_on:
       - kafka
       - influxdb
@@ -96,7 +95,7 @@ services:
     restart: on-failure
     ports:
       - "9110:9109"
- 
+
   producer:
     build:
       context: ../
@@ -126,8 +125,8 @@ services:
       - CSV_FILE_PATH=/app/datasets/swat/attack/SWaT_Dataset_Attack_v0_1.csv
       - METRICS_PORT=8000
     volumes:
-      - ./datasets/swat/attack/:/app/datasets/swat/attack/
-      
+      - ../datasets/swat/attack/:/app/datasets/swat/attack/
+
   kafka-to-influx:
     build:
       context: ../
@@ -189,4 +188,3 @@ volumes:
   influxdb_data:
   grafana_data:
   prometheus_data:
-

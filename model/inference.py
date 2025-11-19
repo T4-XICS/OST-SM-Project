@@ -1,16 +1,21 @@
 import logging
 import os
 import threading
+<<<<<<< HEAD
 import numpy as np
 import torch
 
 from prometheus_client import start_http_server, Gauge, Counter
 
+=======
+import time
+>>>>>>> origin/main
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 from pyspark.sql.functions import col, from_json, trim, when
 import time
 from preprocess_data import preprocess_spark, create_dataloader
+from prometheus_client import start_http_server, Gauge
 
 from network import LSTMVAE, load_model, loss_function
 
@@ -26,6 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(SERVICE_NAME)
 
+<<<<<<< HEAD
 
 # -----------------------------------------------------------------------------
 # Prometheus Metrics
@@ -36,12 +42,16 @@ ae_last_anomaly_score = Gauge(
     "Last anomaly score from LSTM-VAE"
 )
 
+=======
+# Gauge for anomalous sensor events
+>>>>>>> origin/main
 anomaly_gauge = Gauge(
     'anomalous_sensor_event',
     'Detected anomalous sensor event',
     ['sensor']
 )
 
+<<<<<<< HEAD
 ae_threshold = Gauge(
     "ae_threshold",
     "Threshold used for anomaly detection"
@@ -73,6 +83,11 @@ threading.Thread(target=start_prometheus_exporter, daemon=True).start()
 # -----------------------------------------------------------------------------
 # Spark
 # -----------------------------------------------------------------------------
+=======
+start_http_server(8001)
+logger.info("Prometheus metrics server started on port 8001")
+
+>>>>>>> origin/main
 spark = (
     SparkSession.builder
     .appName("MockKafkaConsumerWithInference")
@@ -119,6 +134,7 @@ stream_df = (
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
+<<<<<<< HEAD
 from evaluate import evaluate_lstm
 # -----------------------------------------------------------------------------
 # Evaluation Function
@@ -148,6 +164,8 @@ def compute_scores(model, dataloader, device, percentile_threshold=90):
 # -----------------------------------------------------------------------------
 # foreachBatch
 # -----------------------------------------------------------------------------
+=======
+>>>>>>> origin/main
 model_lock = threading.Lock()
 current_model = None
 model_path = "/weights/lstm_vae_swat.pth"
@@ -270,6 +288,41 @@ def run_eval(batch_df, batch_id):
 # -----------------------------------------------------------------------------
 # Start Spark Stream
 # -----------------------------------------------------------------------------
+    logger.debug(f"Starting Prometheus reporting for batch {batch_id} with {len(anomalies)} anomalies.")
+    if len(anomalies) > 0:
+        try:
+            data = dataloader.dataset
+            for idx in anomalies:
+                if idx < 0 or idx >= len(numeric_cols):
+                    logger.warning(f"Prometheus: Anomaly index {idx} out of range for sensors list.")
+                    continue
+                sensor = numeric_cols[idx]
+                logger.debug(f"Prometheus: Processing anomaly for sensor '{sensor}' (index {idx})")
+                # Find the latest sample in the batch (sequence)
+                # For a typical dataloader, data[-1] is a tensor of shape (sequence_length, num_sensors)
+                # We want the last time step, and the sensor index
+                if hasattr(data, 'iloc'):
+                    tensor_seq = data.iloc[-1]
+                else:
+                    tensor_seq = data[-1]
+                # tensor_seq should be shape (sequence_length, num_sensors)
+                if hasattr(tensor_seq, 'shape') and len(tensor_seq.shape) == 2:
+                    seq_len, num_sensors = tensor_seq.shape
+                    if idx < num_sensors:
+                        value = tensor_seq[-1, idx].item()
+                        logger.debug(f"Prometheus: Sensor {sensor}, value: {value}")
+                        if value is not None:
+                            anomaly_gauge.labels(sensor=sensor).set(value)
+                            logger.info(f"Prometheus metric set: anomalous_sensor_event{{sensor='{sensor}'}} = {value}")
+        except Exception as e:
+            logger.error(f"Prometheus reporting failed: {e}")
+    else:
+        logger.debug(f"Prometheus: No anomalies detected, resetting all gauges to 0.")
+        # Reset all gauges to 0 if there is no anomaly
+        for sensor in numeric_cols:
+            anomaly_gauge.labels(sensor=sensor).set(0)
+            logger.info(f"Prometheus metric reset: anomalous_sensor_event{{sensor='{sensor}'}} = 0")
+
     logger.debug(f"Starting Prometheus reporting for batch {batch_id} with {len(anomalies)} anomalies.")
     if len(anomalies) > 0:
         try:
