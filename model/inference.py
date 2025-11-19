@@ -60,9 +60,9 @@ ae_anomaly_events_total = Counter(
 
 
 def start_prometheus_exporter():
-    """Run exporter on port 9109 in background thread."""
-    logger.info("Starting Prometheus exporter on 9109...")
-    start_http_server(9109)
+    """Run exporter on port 8001 in background thread."""
+    logger.info("Starting Prometheus exporter on 8001...")
+    start_http_server(8001)
     logger.info("Prometheus exporter started.")
 
 
