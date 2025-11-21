@@ -14,9 +14,9 @@ scrape_configs:
 
 <<<<<<< HEAD
   # ----------- LSTM-VAE anomaly metrics (spark-consumer) -----------
-  # - job_name: 'spark-consumer-metrics'
-  #   static_configs:
-  #     - targets: ['spark-consumer:9109']
+  - job_name: 'spark-consumer-metrics'
+    static_configs:
+      - targets: ['spark-consumer:8001']
 
   # ----------- SHAP + surrogate metrics (explainability) -----------
   - job_name: 'explainability-metrics'
