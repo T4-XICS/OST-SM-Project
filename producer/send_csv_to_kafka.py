@@ -177,4 +177,3 @@ if __name__ == "__main__":
     start_http_server(8000)
     # Begin Kafka streaming
     stream_csv_to_kafka()
-
