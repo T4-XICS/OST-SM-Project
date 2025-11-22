@@ -20,5 +20,6 @@ threadpoolctl==3.6.0
 typing_extensions==4.15.0
 prometheus_client==0.23.1
 tzdata==2025.2
+kafka-python
 prometheus_client
 
