@@ -19,7 +19,7 @@ if not os.path.exists(CSV_FILE_PATH):
         CSV_FILE_PATH = alt
 
 # Prometheus metrics port (default 8000)
-METRICS_PORT = int(os.getenv("METRICS_PORT", "8000"))
+METRICS_PORT = int(os.getenv("METRICS_PORT", "8003"))
 
 # --- Prometheus metrics ---
 MESSAGES_SENT = Counter('kafka_messages_sent_total', 'Total number of messages sent to Kafka')

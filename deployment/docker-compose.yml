@@ -193,7 +193,7 @@ services:
     depends_on:
       - producer
     # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
-    gpus: all
+    #gpus: all
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
@@ -218,7 +218,7 @@ services:
     depends_on:
       - producer
     # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
-    gpus: all
+    #gpus: all
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
