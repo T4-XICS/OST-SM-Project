@@ -19,7 +19,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 0,
+  "id": 7,
   "links": [],
   "panels": [
     {
@@ -888,6 +888,85 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 30,
+        "w": 6,
+        "x": 0,
+        "y": 25
+      },
+      "id": 17,
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": {
+          "exponent": 0.5,
+          "fill": "dark-orange",
+          "mode": "scheme",
+          "reverse": false,
+          "scale": "exponential",
+          "scheme": "Oranges",
+          "steps": 64
+        },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
+        "filterValues": {
+          "le": 1e-9
+        },
+        "legend": {
+          "show": true
+        },
+        "rowsFrame": {
+          "layout": "auto"
+        },
+        "tooltip": {
+          "mode": "single",
+          "showColorScale": false,
+          "yHistogram": false
+        },
+        "yAxis": {
+          "axisPlacement": "left",
+          "reverse": false
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(ae_reconstruction_error_bucket[5m])) by (le,sensor)",
+          "instant": false,
+          "legendFormat": "{{sensor}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "New panel",
+      "type": "heatmap"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
       "description": "If batches_processed_total continues to increase, Spark is processing streaming batches normally.\n\nThe sparkline shows the rate of batch processing in the last 5 minutes.\nIf the sparkline suddenly drops → Spark lag, overloaded pipeline, Kafka delay, or model freeze.",
       "fieldConfig": {
         "defaults": {
@@ -933,9 +1012,9 @@
         ]
       },
       "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 0,
+        "h": 8,
+        "w": 18,
+        "x": 6,
         "y": 25
       },
       "id": 13,
@@ -1004,10 +1083,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 25
+        "h": 8,
+        "w": 18,
+        "x": 6,
+        "y": 33
       },
       "id": 16,
       "options": {
@@ -1095,10 +1174,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 15,
-        "w": 24,
-        "x": 0,
-        "y": 32
+        "h": 14,
+        "w": 18,
+        "x": 6,
+        "y": 41
       },
       "id": 15,
       "options": {
@@ -1160,5 +1239,5 @@
   "timezone": "browser",
   "title": "Anomaly Operations Overview",
   "uid": "adbmbt9",
-  "version": 8
+  "version": 2
 }

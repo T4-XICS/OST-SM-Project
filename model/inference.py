@@ -268,7 +268,7 @@ def run_eval(batch_df, batch_id):
                     if err_val is None:
                         # if not provided, set a nominal value of 1.0 (or could compute from model)
                         try:
-                            recon_error.labels(sensor=sensor).set(1.0)
+                            recon_error.labels(sensor=sensor).observe(1.0)
                         except Exception:
                             pass
                     else:
@@ -324,7 +324,6 @@ def run_eval(batch_df, batch_id):
                 # No anomalies => reset recon_error for all sensors to 0 and gauges to 0
                 for sensor in numeric_cols:
                     try:
-                        recon_error.labels(sensor=sensor).set(0)
                         anomaly_gauge.labels(sensor=sensor).set(0)
                     except Exception:
                         pass
