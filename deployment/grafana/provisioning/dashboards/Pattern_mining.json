@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 0,
+  "id": 12,
   "links": [],
   "panels": [
     {
@@ -84,7 +84,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 15,
         "x": 0,
         "y": 0
       },
@@ -130,8 +130,8 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 25,
+            "drawStyle": "points",
+            "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -141,7 +141,7 @@
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
-            "pointSize": 5,
+            "pointSize": 9,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -175,8 +175,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 9,
+        "x": 15,
         "y": 0
       },
       "id": 3,
@@ -196,7 +196,7 @@
       "pluginVersion": "12.2.1",
       "targets": [
         {
-          "query": "from(bucket:\"swat_db\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) => r._measurement == \"pattern_events\" and r._field == \"severity\")\r\n  |> filter(fn: (r) => r[\"pattern\"] == \"FIT_drop_then_LIT_rise\" and r[\"sensor\"] == \"FIT101->LIT101\")\r\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\r\n",
+          "query": "from(bucket: \"swat_db\")\r\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\r\n  |> filter(fn: (r) =>\r\n      r._measurement == \"pattern_events\" and\r\n      r._field == \"severity\" and\r\n      r.pattern == \"FIT_drop_then_LIT_rise\" and\r\n      r.sensor == \"FIT101->LIT101\"\r\n  )\r\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)\r\n",
           "refId": "A"
         }
       ],
@@ -296,5 +296,5 @@
   "timezone": "browser",
   "title": "Pattern mining",
   "uid": "adpxn67",
-  "version": 4
+  "version": 6
 }
