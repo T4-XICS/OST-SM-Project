@@ -234,6 +234,21 @@ services:
       - "logging=promtail"
       - "app=spark-train"
 
+  pattern-miner:
+    build:
+      context: ../
+      dockerfile: streaming/Dockerfile
+    container_name: pattern-miner
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    networks:
+      - icsnet
+    environment:
+      - INFLUX_TOKEN=${INFLUXDB_TOKEN}
+
+
+
 networks:
   icsnet:
     driver: bridge
