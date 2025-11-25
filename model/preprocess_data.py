@@ -42,7 +42,11 @@ _stream_buffer = None
 def create_dataloader(pdf, single=True, batch_size=32, sequence_length=30):
     global _stream_buffer
 
-    df = pdf.toPandas()
+    # Accept either a Spark DataFrame (has toPandas) or an in-memory pandas DataFrame
+    if hasattr(pdf, "toPandas"):
+        df = pdf.toPandas()
+    else:
+        df = pdf
     if df.shape[0] == 0:
         print("create_dataloader: received empty dataframe")
         return None
