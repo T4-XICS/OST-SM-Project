@@ -69,6 +69,16 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       # make Grafana load provisioning files
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=smtp.gmail.com:587
+      - GF_SMTP_USER=grafana.alert.dummy@gmail.com
+      - GF_SMTP_PASSWORD=qsra tjgx gfmi flnf
+      - GF_SMTP_FROM_ADDRESS=grafana.alert.dummy@gmail.com
+      - GF_SMTP_FROM_NAME=Grafana Alerts
+      - GF_SMTP_STARTTLS_ENABLED=true
+      - GF_SMTP_SKIP_VERIFY=false
+      # optional but nice:
+      - GF_ALERTING_ENABLED=true
     ports:
       - "3000:3000"
     networks:
