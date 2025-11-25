@@ -1,5 +1,9 @@
 import torch
 import numpy as np
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 from network import loss_function
 from sklearn.metrics import f1_score
 
