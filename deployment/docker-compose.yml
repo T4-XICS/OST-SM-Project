@@ -247,6 +247,22 @@ services:
     environment:
       - INFLUX_TOKEN=${INFLUXDB_TOKEN}
 
+  feature-selection:
+    build:
+      context: ..
+      dockerfile: feature_engineering/Dockerfile
+    image: swat-feature-selection
+    working_dir: /app/feature_engineering
+
+    volumes:
+      - ../datasets:/app/datasets
+      - ../feature_selection_results:/app/feature_engineering/feature_selection_results
+
+    command: >
+      python feature_selection.py
+        --sample-size 50000
+        --correlation-threshold 0.98
+        --top-features 30
 
   spark-forecast-influx-init:
     image: influxdb:latest
