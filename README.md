@@ -149,6 +149,13 @@ To run the project locally, you need to provide an InfluxDB token as an environm
 - If one or more of the applications are not working correctly, for example showing something else than to the others, you should head to the Docker Desktop - Volumes and delete the problematic application volume.
 - There might be some leftover information in the volumes saved, and a `docker compose up -d --build` will not rebuild it properly
 
+# Contributions (still need adjusting!!)
+- Henrik: model
+- Levente: Kafka
+- Anna: InfluxDB, forecasting
+- Soma: explainability
+- Regina: Grafana, pattern mining
+
 
 # Literature Review
 
