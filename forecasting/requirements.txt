@@ -1,0 +1,6 @@
+torch==2.0.1
+numpy==1.26.4
+pandas==2.3.3
+pyspark==4.0.1
+kafka-python==2.0.2
+influxdb-client==1.38.0

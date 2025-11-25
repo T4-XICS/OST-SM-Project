@@ -248,6 +248,40 @@ services:
       - INFLUX_TOKEN=${INFLUXDB_TOKEN}
 
 
+  spark-forecast-influx-init:
+    image: influxdb:latest
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    command: sh -c 'influx bucket create -n forecasting -o ucs --token ${INFLUXDB_TOKEN} --host http://influxdb:8086 || true'
+    networks:
+      - icsnet
+    restart: no
+    environment:
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+
+  
+  spark-forecast:
+    build:
+      context: ..
+      dockerfile: forecasting/Dockerfile
+    container_name: spark-forecast
+    depends_on:
+      - kafka
+      - influxdb
+      - producer
+      - spark-forecast-influx-init
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - INFLUX_TOKEN=${INFLUXDB_TOKEN}
+    networks:
+      - icsnet
+    ports:
+      - "4050:4040"
+    volumes:
+      - ../model/weights:/weights
+
 
 networks:
   icsnet:
