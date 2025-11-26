@@ -36,15 +36,15 @@ from kafka import KafkaConsumer
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 
-# 🔴 مهم: این سه تا خط را عوض کردم به relative imports
+   
 from .features import rolling_features
 from .explainer_surrogate import SurrogateExplainer
 from .metrics_exporter import (
     start_metrics_server,
     publish_shap_mean,
     publish_topk,
+    publish_anomaly_score,
 )
-
 
 # -----------------------------------------------------------------------------
 # Configuration
@@ -284,6 +284,10 @@ def process_batch(batch_df, batch_id: int) -> None:
     try:
         start_t = time.time()
         SURROGATE.fit(X, y)
+
+        # Publish the latest anomaly score (last y)
+        publish_anomaly_score(float(y.iloc[-1]), batch_id=batch_id)
+
         mean_map, top_pairs = SURROGATE.explain_last(X, top_k=5)
         duration = time.time() - start_t
     except Exception as exc:
@@ -303,7 +307,7 @@ def process_batch(batch_df, batch_id: int) -> None:
     # ------------------------------------------------------------------
     try:
         if mean_map:
-            publish_shap_mean(mean_map)
+            publish_shap_mean(mean_map, batch_id=batch_id)
         if top_pairs:
             publish_topk(top_pairs)
     except Exception as exc:
@@ -321,7 +325,6 @@ def main() -> None:
     LOGGER.info("Prometheus metrics port: %d", PROMETHEUS_PORT)
 
     # Start Prometheus exporter
-    # Start Prometheus exporter correctly
     start_metrics_server(PROMETHEUS_PORT)
     LOGGER.info("Prometheus metrics exporter started on port %d.", PROMETHEUS_PORT)
 

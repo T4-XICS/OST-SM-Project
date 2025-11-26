@@ -1,59 +1,66 @@
-import logging
-from prometheus_client import start_http_server, Gauge, Histogram, Counter
+from prometheus_client import Gauge, start_http_server
 
-logger = logging.getLogger(__name__)
 
-# -----------------------------------------------------------------------------
-# Metrics definitions
-# -----------------------------------------------------------------------------
+# ---------------------------
+# SHAP mean per batch (0-1)
+# ---------------------------
 GAUGE_SHAP_MEAN = Gauge(
-    "explain_shap_mean_abs_importance",
-    "Mean |SHAP| value per feature (normalized to [0, 1])",
-    ["feature"],
+    "explain_shap_mean_abs",
+    "Mean |SHAP| value per feature per batch (normalized 0-1)",
+    ["feature", "batch"]
 )
 
-GAUGE_TOPK = Gauge(
-    "explain_top_feature_weight",
-    "Weight of top-k features for the latest explained window",
-    ["rank", "feature"],
-)
 
-HIST_LATENCY = Histogram(
-    "explain_latency_seconds",
-    "Latency of SHAP explanation per batch",
-)
-
-COUNTER_ERR = Counter(
-    "explain_errors_total",
-    "Number of SHAP explanation failures",
-)
-
-_METRICS_STARTED = False
-
-
-def start_metrics_server(port: int = 9109) -> None:
+def start_metrics_server(port: int):
     """
-    Correct name: start_metrics_server (called by stream_explain_job)
+    Expose /metrics endpoint for Prometheus.
     """
-    global _METRICS_STARTED
-    if _METRICS_STARTED:
-        logger.info("[metrics] already running on port %s", port)
-        return
-
     start_http_server(port)
-    _METRICS_STARTED = True
-    logger.info("[metrics] Prometheus exposed at http://0.0.0.0:%s/metrics", port)
+    print(f"[metrics] Prometheus exposed at http://0.0.0.0:{port}/metrics")
 
 
-def publish_shap_mean(abs_mean: dict) -> None:
-    if not abs_mean:
-        return
-    for f, v in abs_mean.items():
-        GAUGE_SHAP_MEAN.labels(feature=str(f)).set(float(v))
+def publish_shap_mean(shap_dict: dict, batch_id: int):
+    """
+    Publish mean SHAP values per feature.
+    shap_dict example:
+        {"FIT101__zlast": 0.55, "P301__zlast": 0.12, ...}
+    """
+    for feat, val in shap_dict.items():
+        GAUGE_SHAP_MEAN.labels(
+            feature=feat,
+            batch=str(batch_id)
+        ).set(float(val))
 
 
-def publish_topk(pairs) -> None:
-    if not pairs:
-        return
-    for i, (f, w) in enumerate(pairs, start=1):
-        GAUGE_TOPK.labels(rank=str(i), feature=str(f)).set(float(w))
+# ---------------------------
+# OPTIONAL: Top-K features
+# ---------------------------
+GAUGE_TOPK = Gauge(
+    "explain_topk_features",
+    "Top-K SHAP features for last window",
+    ["rank", "feature"]
+)
+
+
+def publish_topk(top_pairs):
+    """
+    Publish SHAP top-k features.
+    top_pairs example:
+        [("FIT101__zlast", 0.9), ("P302__zlast", 0.7), ...]
+    """
+    for rank, (feat, val) in enumerate(top_pairs, start=1):
+        GAUGE_TOPK.labels(
+            rank=str(rank),
+            feature=feat
+        ).set(float(val))
+# ---------------------------
+# ANOMALY SCORE GAUGE (0-1)
+# ---------------------------
+GAUGE_ANOMALY_SCORE = Gauge(
+    "inference_anomaly_score",
+    "Latest LSTM anomaly score (0-1) per batch",
+    ["batch"]
+)
+
+def publish_anomaly_score(score: float, batch_id: int):
+    GAUGE_ANOMALY_SCORE.labels(batch=str(batch_id)).set(float(score))

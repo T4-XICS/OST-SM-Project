@@ -33,7 +33,7 @@ logger = logging.getLogger(SERVICE_NAME)
 # -----------------------------------------------------------------------------#
 ae_last_anomaly_score = Gauge(
     "ae_last_anomaly_score",
-    "Last anomaly score from LSTM-VAE",
+    "Last anomaly score from LSTM-VAE (normalized to [0, 1] w.r.t. threshold)",
 )
 
 ae_threshold = Gauge(
@@ -57,21 +57,17 @@ anomaly_gauge = Gauge(
     ["sensor"],
 )
 
+
 def start_prometheus_exporter():
     """
-    Expose the SAME metrics registry on both ports:
-      - 9109  -> job 'spark-consumer-metrics'
-      - 8001  -> job 'spark-consumer-inference'
-    This keeps group configs intact and makes both Prometheus targets UP.
+    Expose metrics on 9109 (existing) and 8001 (extra) so both Prom targets stay UP.
     """
     logger.info("Starting Prometheus exporter on ports 9109 and 8001...")
-    # main existing port used by the team
     start_http_server(9109)
-    # extra port to satisfy spark-consumer-inference target
     start_http_server(8001)
     logger.info("Prometheus exporter started on ports 9109 and 8001.")
 
-# start the exporter in a background thread
+
 threading.Thread(target=start_prometheus_exporter, daemon=True).start()
 
 # -----------------------------------------------------------------------------#
@@ -109,12 +105,11 @@ KAFKA_INPUT_TOPIC = os.getenv("KAFKA_INPUT_TOPIC", "ics-sensor-data")
 KAFKA_OUTPUT_TOPIC = os.getenv("KAFKA_OUTPUT_TOPIC", "ics-anomaly-scores")
 
 # -----------------------------------------------------------------------------#
-# Kafka producer with retry
+# Kafka producer
 # -----------------------------------------------------------------------------#
 def create_kafka_producer_with_retry(max_retries: int = 40, sleep_sec: float = 3.0):
     """
-    Create KafkaProducer with retries.
-    Prevents container crash when Kafka is not ready yet.
+    Create KafkaProducer with retries to avoid crashing if Kafka is not ready yet.
     """
     for attempt in range(1, max_retries + 1):
         try:
@@ -139,6 +134,7 @@ def create_kafka_producer_with_retry(max_retries: int = 40, sleep_sec: float = 3
     )
     return None
 
+
 producer = create_kafka_producer_with_retry()
 
 # -----------------------------------------------------------------------------#
@@ -161,6 +157,15 @@ logger.info(f"Using device: {device}")
 # Compute scores helper
 # -----------------------------------------------------------------------------#
 def compute_scores(model, dataloader, device, percentile_threshold=90):
+    """
+    Run the LSTM-VAE over the dataloader, collect reconstruction losses
+    as 'scores', and compute a percentile-based threshold.
+
+    Returns:
+        scores: list[float]
+        anomalies: list[int]
+        threshold: float | None
+    """
     model.eval()
     scores = []
 
@@ -189,6 +194,7 @@ current_model = None
 model_path = os.getenv("MODEL_PATH", "/weights/lstm_vae_swat.pth")
 last_modified_time = None
 
+
 def load_model_safe():
     global current_model, last_modified_time
     try:
@@ -206,6 +212,7 @@ def load_model_safe():
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
 
+
 def check_and_reload_model():
     global last_modified_time
     try:
@@ -218,11 +225,13 @@ def check_and_reload_model():
     except Exception as e:
         logger.error(f"Error checking model file: {e}")
 
+
 def model_reload_worker(check_interval=60):
     logger.info(f"Model reload worker started. Interval: {check_interval}s")
     while True:
         time.sleep(check_interval)
         check_and_reload_model()
+
 
 load_model_safe()
 threading.Thread(
@@ -272,19 +281,33 @@ def run_eval(batch_df, batch_id):
         logger.warning(f"Batch {batch_id}: model not loaded yet.")
         return
 
-    # --- Run inference ---
     scores, anomalies, threshold = compute_scores(
         model_to_use, dataloader, device
     )
 
     logger.info(f"BATCH {batch_id} — {len(scores)} scores, threshold={threshold}")
 
-    # --- Prometheus ---
+    # --- PROMETHEUS METRICS ---
     if scores:
         last_score = scores[-1]
         is_anomaly = 1 if anomalies else 0
 
-        ae_last_anomaly_score.set(last_score)
+        # --- Normalize last_score with respect to threshold into [0, 1] ---
+        if threshold is not None and threshold > 0:
+            normalized_score = last_score / threshold
+        else:
+            normalized_score = last_score
+
+        # Clamp to [0, 1] so dashboards always see a bounded value
+        if normalized_score < 0.0:
+            normalized_score = 0.0
+        elif normalized_score > 1.0:
+            normalized_score = 1.0
+
+        # Export normalized score to Prometheus
+        ae_last_anomaly_score.set(normalized_score)
+
+        # Export threshold & anomaly flags as before
         if threshold is not None:
             ae_threshold.set(threshold)
         ae_is_anomaly.set(is_anomaly)
@@ -294,8 +317,11 @@ def run_eval(batch_df, batch_id):
         anomaly_gauge.labels(sensor="any").set(is_anomaly)
 
         logger.info(
-            f"Prometheus updated: score={last_score:.5f}, threshold={threshold}, "
-            f"is_anomaly={is_anomaly}"
+            "Prometheus updated: raw_score=%.5f, norm_score=%.5f, threshold=%s, is_anomaly=%d",
+            last_score,
+            normalized_score,
+            threshold,
+            is_anomaly,
         )
 
     # --- SEND REAL LSTM SCORES TO KAFKA ---
@@ -309,7 +335,9 @@ def run_eval(batch_df, batch_id):
                     producer.send(KAFKA_OUTPUT_TOPIC, payload)
                 producer.flush()
                 logger.info(
-                    f"Sent {len(scores)} anomaly scores to Kafka topic '{KAFKA_OUTPUT_TOPIC}'"
+                    "Sent %d anomaly scores to Kafka topic '%s'",
+                    len(scores),
+                    KAFKA_OUTPUT_TOPIC,
                 )
             except Exception as e:
                 logger.error(f"Failed to send anomaly scores: {e}")
