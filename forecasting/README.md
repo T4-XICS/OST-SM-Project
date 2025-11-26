@@ -115,3 +115,38 @@ docker build -t forecasting:latest -f forecasting/Dockerfile .
 - kafka-clients-3.5.1.jar
 - commons-pool2-2.11.1.jar
 
+## Troubleshooting
+
+### Model Loading Failures
+
+```bash
+# Check model file exists
+ls -lh /weights/lstm_vae_swat.pth
+
+# Verify checkpoint format
+python -c "import torch; print(torch.load('/weights/lstm_vae_swat.pth').keys())"
+```
+
+### Kafka Connection Issues
+
+```bash
+# Test Kafka connectivity
+kafka-console-consumer --bootstrap-server kafka:9092 \
+  --topic ics-sensor-data --from-beginning
+```
+### InfluxDB Write Failures
+
+```bash
+# Verify InfluxDB connection
+curl -I ${INFLUX_URL}/health
+
+# Check bucket exists
+influx bucket list --org ${INFLUX_ORG} --token ${INFLUX_TOKEN}
+```
+
+### Insufficient Sequence Length
+```log
+[INFO] Not enough rows for a sequence — skipping batch.
+```
+**Souliton**: 
+Wait for more data to accumulate or reduce **SEQ_LEN**.
