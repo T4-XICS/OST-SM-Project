@@ -9,10 +9,19 @@ import torch
 from kafka import KafkaProducer
 
 from prometheus_client import start_http_server, Gauge, Counter
+from collections import defaultdict
+import numpy as np
+import joblib
 
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 from pyspark.sql.functions import col, from_json, trim, when
+
+from preprocess_data import preprocess_spark, create_dataloader
+from network import LSTMVAE, load_model  # load_model should return a torch model instance
+from evaluate import evaluate_lstm  # evaluate_lstm returns anomalies
+
+from prometheus_client import start_http_server, Counter, Gauge, Histogram
 
 from preprocess_data import preprocess_spark, create_dataloader
 from network import load_model, loss_function
@@ -202,6 +211,7 @@ def load_model_safe():
             logger.warning(f"Model path {model_path} does not exist yet.")
             return
         logger.info(f"Loading model from {model_path}")
+        
         with model_lock:
             current_model = load_model(model_path, device=device)
             current_model.eval()
@@ -352,4 +362,5 @@ query = (
     .start()
 )
 
+logger.info("Spark streaming started - awaiting termination")
 query.awaitTermination()

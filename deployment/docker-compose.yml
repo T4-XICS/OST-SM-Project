@@ -56,6 +56,16 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=smtp.gmail.com:587
+      - GF_SMTP_USER=grafana.alert.dummy@gmail.com
+      - GF_SMTP_PASSWORD=qsra tjgx gfmi flnf
+      - GF_SMTP_FROM_ADDRESS=grafana.alert.dummy@gmail.com
+      - GF_SMTP_FROM_NAME=Grafana Alerts
+      - GF_SMTP_STARTTLS_ENABLED=true
+      - GF_SMTP_SKIP_VERIFY=false
+      # optional but nice:
+      - GF_ALERTING_ENABLED=true
     ports:
       - "3000:3000"
     networks:
@@ -153,6 +163,13 @@ services:
     command: ["inference.py"]
     depends_on:
       - producer
+    # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
+    #gpus: all
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - SERVICE_NAME=spark-consumer
+      - LOG_LEVEL=INFO
     networks:
       - icsnet
     ports:
@@ -171,6 +188,13 @@ services:
     command: ["train.py"]
     depends_on:
       - producer
+    # request all GPUs (requires NVIDIA Container Toolkit / Docker Desktop GPU support)
+    #gpus: all
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - SERVICE_NAME=spark-train
+      - LOG_LEVEL=INFO
     networks:
       - icsnet
     ports:
@@ -178,6 +202,70 @@ services:
     volumes:
       - ../model/weights:/weights
   # --------------------------------------------------
+
+  pattern-miner:
+    build:
+      context: ../
+      dockerfile: streaming/Dockerfile
+    container_name: pattern-miner
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    networks:
+      - icsnet
+    environment:
+      - INFLUX_TOKEN=${INFLUXDB_TOKEN}
+
+  feature-selection:
+    build:
+      context: ..
+      dockerfile: feature_engineering/Dockerfile
+    image: swat-feature-selection
+    working_dir: /app/feature_engineering
+    volumes:
+      - ../datasets:/app/datasets
+      - ../feature_selection_results:/app/feature_engineering/feature_selection_results
+    command: >
+      python feature_selection.py
+        --sample-size 50000
+        --correlation-threshold 0.98
+        --top-features 30
+    profiles: ["manual"]
+
+  spark-forecast-influx-init:
+    image: influxdb:latest
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    command: sh -c 'influx bucket create -n forecasting -o ucs --token ${INFLUXDB_TOKEN} --host http://influxdb:8086 || true'
+    networks:
+      - icsnet
+    restart: no
+    environment:
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+
+  
+  spark-forecast:
+    build:
+      context: ..
+      dockerfile: forecasting/Dockerfile
+    container_name: spark-forecast
+    depends_on:
+      - kafka
+      - influxdb
+      - producer
+      - spark-forecast-influx-init
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - INFLUX_TOKEN=${INFLUXDB_TOKEN}
+    networks:
+      - icsnet
+    ports:
+      - "4050:4040"
+    volumes:
+      - ../model/weights:/weights
+
 
 networks:
   icsnet:

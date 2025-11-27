@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Install system utilities for debugging and dependencies
 RUN apt-get update && \
-    apt-get install -y procps curl && \
+    apt-get install -y procps curl bash dos2unix && \
     rm -rf /var/lib/apt/lists/* && \
     pip install --no-cache-dir kafka-python influxdb-client pandas prometheus-api-client
 
@@ -18,6 +18,6 @@ RUN echo '#!/bin/bash\necho "KAFKA_SERVER=kafka:9092"\necho "INFLUX_URL=http://i
     chmod +x /app/debug.sh
 
 COPY influxdb-export/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+RUN dos2unix /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 ENTRYPOINT ["/app/entrypoint.sh"]
