@@ -150,10 +150,9 @@ def update_preprocess_data_with_features(selected_features_path: str = 'feature_
     except FileNotFoundError:
         print(f"Error: Selected features file not found: {selected_features_path}")
         return None
-    
-    # Generate updated preprocessing function
-    code = f'''
-def preprocess_spark_with_feature_selection(df):
+        
+# Generate updated preprocessing function
+def preprocess_spark_with_feature_selection(df, selected_features: List[str]):
     """
     Updated preprocessing function with feature selection
     
@@ -193,9 +192,6 @@ def preprocess_spark_with_feature_selection(df):
     print(f"Preprocessed data: {{len(df.columns)}} features selected")
     
     return df
-'''
-    
-    return code
 
 
 # Example usage functions
@@ -250,46 +246,3 @@ def example_generate_preprocessing_code():
         with open('preprocess_data_updated.py', 'w') as f:
             f.write(code)
         print("\nSaved to: preprocess_data_updated.py")
-
-
-if __name__ == "__main__":
-    print("="*60)
-    print("FEATURE SELECTION INTEGRATION EXAMPLES")
-    print("="*60)
-    
-    # Check if feature selection has been run
-    import os
-    if not os.path.exists('feature_selection_results/feature_selection_report.json'):
-        print("\n⚠️  Feature selection has not been run yet!")
-        print("\nPlease run feature selection first:")
-        print("  python run_feature_selection.py --sample-size 50000")
-        print("\nThen run this script again to see integration examples.")
-    else:
-        # Run examples
-        integrator = FeatureSelectionIntegration()
-        integrator.print_summary()
-        
-        print("\n" + "="*60)
-        print("INTEGRATION CODE EXAMPLES")
-        print("="*60)
-        
-        # Show how to use in code
-        print("\n1. Load and filter DataFrame:")
-        print("""
-from feature_integration import FeatureSelectionIntegration
-
-integrator = FeatureSelectionIntegration()
-df_filtered = integrator.filter_dataframe(df, keep_labels=True)
-        """)
-        
-        print("\n2. Get selected features for Spark:")
-        print("""
-selected_features = integrator.get_selected_features()
-df_spark = df_spark.select(selected_features)
-        """)
-        
-        print("\n3. Get feature importance:")
-        print("""
-top_features = integrator.get_feature_importance(top_n=20)
-print(top_features)
-        """)

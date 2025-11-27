@@ -1,16 +1,3 @@
-"""
-Feature Selection Script for Anomaly Detection Model
-
-This script performs feature selection on the SWaT dataset following best practices:
-1. Remove features with static values (zero variance)
-2. Remove features with more than 50% null values
-3. Remove highly correlated features (>98% correlation)
-4. Optional: Apply advanced feature selection techniques
-
-Note: In production cybersecurity systems, feature selection should be used cautiously
-as attackers may target different features over time. This script is for training purposes.
-"""
-
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
@@ -19,7 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import json
 import os
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 
 class FeatureSelector:
@@ -374,8 +361,8 @@ class FeatureSelector:
 
 def run_feature_selection(normal_data_path: str,
                          attack_data_path: str = None,
-                         output_dir: str = 'feature_selection_results',
-                         sample_size: int = 50000,
+                         output_dir: Optional[str] = '',
+                         sample_size: int = None,
                          variance_threshold: float = 1e-6,
                          null_threshold: float = 0.5,
                          correlation_threshold: float = 0.98,
@@ -487,11 +474,13 @@ if __name__ == "__main__":
     # Example usage
     NORMAL_DATA = '../datasets/swat/normal/SWaT_Dataset_Normal_v0_1.csv'
     ATTACK_DATA = '../datasets/swat/attack/SWaT_Dataset_Attack_v0_1.csv'
-    
+    output_dir = os.path.join(os.path.dirname(__file__), 
+                          'feature_engineering/feature_selection_results')
+
     selector, df_selected = run_feature_selection(
         normal_data_path=NORMAL_DATA,
         attack_data_path=ATTACK_DATA,
-        output_dir='feature_selection_results',
+        output_dir=output_dir,
         sample_size=50000,  # Sample 50k rows for faster processing
         variance_threshold=1e-6,  # Very low variance threshold
         null_threshold=0.5,  # 50% null values
@@ -502,4 +491,4 @@ if __name__ == "__main__":
     
     print("\n✓ Feature selection complete!")
     print(f"Selected features: {len(selector.selected_features)}")
-    print(f"Results saved to: feature_selection_results/")
+    print(f"Results saved to: {output_dir}/")

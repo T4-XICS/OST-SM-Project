@@ -1,0 +1,231 @@
+{
+  "dashboards": [
+    {
+      "dashboard_name": "Forecasting Overview",
+      "description": "High-level overview of forecasting system performance and predictions",
+      "panels": [
+        {
+          "title": "Real-time vs Forecast - AIT201 (Temperature)",
+          "type": "timeseries",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field == \"AIT201\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"forecast\")",
+          "description": "Compare actual sensor readings with forecasted values for AIT201"
+        },
+        {
+          "title": "Real-time vs Forecast - FIT301 (Flow)",
+          "type": "timeseries",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field == \"FIT301\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"forecast\")",
+          "description": "Compare actual sensor readings with forecasted values for FIT301"
+        },
+        {
+          "title": "Real-time vs Forecast - LIT101 (Level)",
+          "type": "timeseries",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field == \"LIT101\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"forecast\")",
+          "description": "Compare actual sensor readings with forecasted values for LIT101"
+        },
+        {
+          "title": "Forecast Accuracy - MAE",
+          "type": "stat",
+          "query": "// Calculate Mean Absolute Error between actual and forecast\nactual = from(bucket: \"ics-sensor-data\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"sensor_data\")\n  |> filter(fn: (r) => r._field == \"AIT201\" or r._field == \"FIT301\" or r._field == \"LIT101\")\n\nforecast = from(bucket: \"forecasting\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field == \"AIT201\" or r._field == \"FIT301\" or r._field == \"LIT101\")\n\njoin(\n  tables: {actual: actual, forecast: forecast},\n  on: [\"_time\", \"_field\"]\n)\n  |> map(fn: (r) => ({ r with error: math.abs(x: r._value_actual - r._value_forecast) }))\n  |> mean(column: \"error\")",
+          "description": "Mean Absolute Error across all forecasted features"
+        },
+        {
+          "title": "Forecasting Latency",
+          "type": "stat",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"system_metrics\")\n  |> filter(fn: (r) => r._field == \"inference_time_ms\")\n  |> mean()",
+          "description": "Average time taken for model inference"
+        },
+        {
+          "title": "Predictions Written (Rate)",
+          "type": "stat",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> count()\n  |> map(fn: (r) => ({ r with _value: r._value / 300.0 }))",
+          "description": "Rate of forecast writes per second"
+        }
+      ]
+    },
+    {
+      "dashboard_name": "Feature-Specific Analysis",
+      "description": "Detailed analysis for each forecasted feature",
+      "panels": [
+        {
+          "title": "AIT201 - 10-Step Forecast Horizon",
+          "type": "timeseries",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field == \"AIT201\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "description": "Full 10-step ahead forecast visualization for AIT201"
+        },
+        {
+          "title": "AIT201 - Forecast Error Distribution",
+          "type": "histogram",
+          "query": "// Error distribution for AIT201\nactual = from(bucket: \"ics-sensor-data\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"sensor_data\")\n  |> filter(fn: (r) => r._field == \"AIT201\")\n\nforecast = from(bucket: \"forecasting\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field == \"AIT201\")\n\njoin(\n  tables: {actual: actual, forecast: forecast},\n  on: [\"_time\"]\n)\n  |> map(fn: (r) => ({ r with error: r._value_actual - r._value_forecast }))",
+          "description": "Distribution of prediction errors for AIT201"
+        },
+        {
+          "title": "FIT301 - 10-Step Forecast Horizon",
+          "type": "timeseries",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field == \"FIT301\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "description": "Full 10-step ahead forecast visualization for FIT301"
+        },
+        {
+          "title": "FIT301 - Forecast Error Distribution",
+          "type": "histogram",
+          "query": "// Error distribution for FIT301\nactual = from(bucket: \"ics-sensor-data\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"sensor_data\")\n  |> filter(fn: (r) => r._field == \"FIT301\")\n\nforecast = from(bucket: \"forecasting\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field == \"FIT301\")\n\njoin(\n  tables: {actual: actual, forecast: forecast},\n  on: [\"_time\"]\n)\n  |> map(fn: (r) => ({ r with error: r._value_actual - r._value_forecast }))",
+          "description": "Distribution of prediction errors for FIT301"
+        },
+        {
+          "title": "LIT101 - 10-Step Forecast Horizon",
+          "type": "timeseries",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field == \"LIT101\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "description": "Full 10-step ahead forecast visualization for LIT101"
+        },
+        {
+          "title": "LIT101 - Forecast Error Distribution",
+          "type": "histogram",
+          "query": "// Error distribution for LIT101\nactual = from(bucket: \"ics-sensor-data\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"sensor_data\")\n  |> filter(fn: (r) => r._field == \"LIT101\")\n\nforecast = from(bucket: \"forecasting\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field == \"LIT101\")\n\njoin(\n  tables: {actual: actual, forecast: forecast},\n  on: [\"_time\"]\n)\n  |> map(fn: (r) => ({ r with error: r._value_actual - r._value_forecast }))",
+          "description": "Distribution of prediction errors for LIT101"
+        },
+        {
+          "title": "Multi-Feature Correlation Heatmap",
+          "type": "heatmap",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> pivot(rowKey:[\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")",
+          "description": "Correlation between forecasted features over time"
+        }
+      ]
+    },
+    {
+      "dashboard_name": "Model Performance & System Health",
+      "description": "Monitor model performance, resource usage, and system health",
+      "panels": [
+        {
+          "title": "Model Inference Time (ms)",
+          "type": "timeseries",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system_metrics\")\n  |> filter(fn: (r) => r._field == \"inference_time_ms\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "description": "Track model inference latency over time"
+        },
+        {
+          "title": "GPU Memory Usage (%)",
+          "type": "timeseries",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system_metrics\")\n  |> filter(fn: (r) => r._field == \"gpu_memory_percent\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "description": "GPU memory utilization"
+        },
+        {
+          "title": "GPU Utilization (%)",
+          "type": "gauge",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"system_metrics\")\n  |> filter(fn: (r) => r._field == \"gpu_utilization_percent\")\n  |> mean()",
+          "description": "Current GPU utilization percentage"
+        },
+        {
+          "title": "Batch Processing Rate",
+          "type": "stat",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"system_metrics\")\n  |> filter(fn: (r) => r._field == \"batch_id\")\n  |> count()\n  |> map(fn: (r) => ({ r with _value: r._value / 300.0 }))",
+          "description": "Batches processed per second"
+        },
+        {
+          "title": "Model Reload Events",
+          "type": "timeseries",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system_metrics\")\n  |> filter(fn: (r) => r._field == \"model_reload\")\n  |> aggregateWindow(every: v.windowPeriod, fn: count, createEmpty: false)",
+          "description": "Track when model weights are reloaded"
+        },
+        {
+          "title": "Failed Batch Count",
+          "type": "stat",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"system_metrics\")\n  |> filter(fn: (r) => r._field == \"batch_failed\")\n  |> count()",
+          "description": "Number of failed batches in last hour"
+        },
+        {
+          "title": "Sequence Length Distribution",
+          "type": "histogram",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"system_metrics\")\n  |> filter(fn: (r) => r._field == \"sequence_length\")",
+          "description": "Distribution of input sequence lengths"
+        },
+        {
+          "title": "InfluxDB Write Latency (ms)",
+          "type": "timeseries",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system_metrics\")\n  |> filter(fn: (r) => r._field == \"influxdb_write_time_ms\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "description": "Time taken to write forecasts to InfluxDB"
+        }
+      ]
+    },
+    {
+      "dashboard_name": "Anomaly Detection & Alerts",
+      "description": "Detect anomalies and trigger alerts based on forecast deviations",
+      "panels": [
+        {
+          "title": "Forecast Deviation Score",
+          "type": "timeseries",
+          "query": "actual = from(bucket: \"ics-sensor-data\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensor_data\")\n  |> filter(fn: (r) => r._field == \"AIT201\" or r._field == \"FIT301\" or r._field == \"LIT101\")\n\nforecast = from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field == \"AIT201\" or r._field == \"FIT301\" or r._field == \"LIT101\")\n\njoin(\n  tables: {actual: actual, forecast: forecast},\n  on: [\"_time\", \"_field\"]\n)\n  |> map(fn: (r) => ({ \n      r with deviation: math.abs(x: (r._value_actual - r._value_forecast) / r._value_forecast * 100.0) \n    }))\n  |> keep(columns: [\"_time\", \"_field\", \"deviation\"])",
+          "description": "Percentage deviation between actual and forecast values",
+          "alert": {
+            "condition": "deviation > 10",
+            "severity": "warning",
+            "message": "Forecast deviation exceeds 10% threshold"
+          }
+        },
+        {
+          "title": "High Deviation Alerts (>15%)",
+          "type": "table",
+          "query": "actual = from(bucket: \"ics-sensor-data\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"sensor_data\")\n  |> filter(fn: (r) => r._field == \"AIT201\" or r._field == \"FIT301\" or r._field == \"LIT101\")\n\nforecast = from(bucket: \"forecasting\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field == \"AIT201\" or r._field == \"FIT301\" or r._field == \"LIT101\")\n\njoin(\n  tables: {actual: actual, forecast: forecast},\n  on: [\"_time\", \"_field\"]\n)\n  |> map(fn: (r) => ({ \n      r with deviation: math.abs(x: (r._value_actual - r._value_forecast) / r._value_forecast * 100.0) \n    }))\n  |> filter(fn: (r) => r.deviation > 15.0)\n  |> sort(columns: [\"deviation\"], desc: true)",
+          "description": "List of measurements with >15% forecast deviation"
+        },
+        {
+          "title": "Prediction Confidence Interval",
+          "type": "timeseries",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field =~ /.*_confidence_.*/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "description": "Confidence intervals for forecasts (if available)"
+        },
+        {
+          "title": "Anomaly Score by Feature",
+          "type": "bar",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"anomaly_score\")\n  |> filter(fn: (r) => r._field == \"AIT201\" or r._field == \"FIT301\" or r._field == \"LIT101\")\n  |> mean()\n  |> group(columns: [\"_field\"])",
+          "description": "Average anomaly score per feature in last hour"
+        },
+        {
+          "title": "Sudden Change Detection",
+          "type": "timeseries",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"forecast\")\n  |> filter(fn: (r) => r._field == \"AIT201\" or r._field == \"FIT301\" or r._field == \"LIT101\")\n  |> derivative(unit: 1s, nonNegative: false)\n  |> map(fn: (r) => ({ r with abs_change: math.abs(x: r._value) }))",
+          "description": "Rate of change in forecasted values (derivative)"
+        },
+        {
+          "title": "Alert Summary",
+          "type": "stat",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"alerts\")\n  |> filter(fn: (r) => r._field == \"alert_triggered\")\n  |> count()",
+          "description": "Total alerts triggered in last 24 hours"
+        }
+      ]
+    },
+    {
+      "dashboard_name": "Multi-Step Forecast Comparison",
+      "description": "Compare forecast accuracy across different forecast horizons",
+      "panels": [
+        {
+          "title": "AIT201 - Forecast Accuracy by Step",
+          "type": "bar",
+          "query": "// Compare accuracy for each of the 10 forecast steps\nfrom(bucket: \"forecasting\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"forecast_step\")\n  |> filter(fn: (r) => r._field == \"AIT201\")\n  |> group(columns: [\"step\"])\n  |> mean(column: \"error\")",
+          "description": "MAE for each step in 10-step forecast horizon"
+        },
+        {
+          "title": "FIT301 - Forecast Accuracy by Step",
+          "type": "bar",
+          "query": "// Compare accuracy for each of the 10 forecast steps\nfrom(bucket: \"forecasting\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"forecast_step\")\n  |> filter(fn: (r) => r._field == \"FIT301\")\n  |> group(columns: [\"step\"])\n  |> mean(column: \"error\")",
+          "description": "MAE for each step in 10-step forecast horizon"
+        },
+        {
+          "title": "LIT101 - Forecast Accuracy by Step",
+          "type": "bar",
+          "query": "// Compare accuracy for each of the 10 forecast steps\nfrom(bucket: \"forecasting\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"forecast_step\")\n  |> filter(fn: (r) => r._field == \"LIT101\")\n  |> group(columns: [\"step\"])\n  |> mean(column: \"error\")",
+          "description": "MAE for each step in 10-step forecast horizon"
+        },
+        {
+          "title": "Forecast Horizon Degradation",
+          "type": "timeseries",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"forecast_step\")\n  |> filter(fn: (r) => r._field == \"AIT201\" or r._field == \"FIT301\" or r._field == \"LIT101\")\n  |> group(columns: [\"step\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "description": "How forecast accuracy degrades over the 10-step horizon"
+        },
+        {
+          "title": "Best vs Worst Performing Steps",
+          "type": "table",
+          "query": "from(bucket: \"forecasting\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"forecast_step\")\n  |> group(columns: [\"step\", \"_field\"])\n  |> mean(column: \"error\")\n  |> sort(columns: [\"_value\"], desc: true)",
+          "description": "Ranking of forecast steps by accuracy"
+        }
+      ]
+    }
+  ]
+}
