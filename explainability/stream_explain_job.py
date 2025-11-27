@@ -59,18 +59,18 @@ KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 KAFKA_SENSOR_TOPIC = os.getenv("KAFKA_SENSOR_TOPIC", "ics-sensor-data")
 KAFKA_ANOMALY_TOPIC = os.getenv("KAFKA_ANOMALY_TOPIC", "ics-anomaly-scores")
 
-# Port inside the explainability container for Prometheus metrics
+
 PROMETHEUS_PORT = int(os.getenv("EXPLAIN_METRICS_PORT", "9109"))
 
-# Columns we want to use as numeric sensors.
+
 SENSOR_COLUMNS: List[str] = [
     "FIT101", "LIT101", "P101", "P102",
     "FIT201", "LIT201", "P201", "P202",
     "FIT301", "LIT301", "P301", "P302",
 ]
 
-TIMESTAMP_COL = "Timestamp"          # from SWaT JSON
-LABEL_COL = "Normal_Attack"          # "Normal" / "Attack" (optional)
+TIMESTAMP_COL = "Timestamp"          
+LABEL_COL = "Normal_Attack"          
 
 # -----------------------------------------------------------------------------
 # Global state for AE (LSTM anomaly scores)
@@ -96,7 +96,7 @@ def parse_json_batch(batch_df) -> pd.DataFrame:
     if count == 0:
         return pd.DataFrame()
 
-    # value is a binary column; cast to string first
+
     pdf = batch_df.select(col("value").cast("string").alias("value")).toPandas()
     try:
         records = [json.loads(v) for v in pdf["value"].tolist() if v]
@@ -324,14 +324,14 @@ def main() -> None:
     LOGGER.info("Anomaly topic: %s", KAFKA_ANOMALY_TOPIC)
     LOGGER.info("Prometheus metrics port: %d", PROMETHEUS_PORT)
 
-    # Start Prometheus exporter
+    
     start_metrics_server(PROMETHEUS_PORT)
     LOGGER.info("Prometheus metrics exporter started on port %d.", PROMETHEUS_PORT)
 
-    # Start AE bridge in background
+    
     start_ae_bridge()
 
-    # Spark session
+    
     spark = (
         SparkSession.builder
         .appName("ExplainabilityStreamJob")
@@ -339,7 +339,7 @@ def main() -> None:
     )
     spark.sparkContext.setLogLevel("WARN")
 
-    # Kafka source
+    
     raw_df = (
         spark.readStream
         .format("kafka")

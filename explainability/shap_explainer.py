@@ -22,25 +22,25 @@ class ShapExplainer:
         and update Prometheus metrics.
         """
 
-        # Start timer
+        
         start = time.perf_counter()
 
-        # Run SHAP
+        
         shap_values = self.explainer(instance)
 
-        # Stop timer
+        
         duration = time.perf_counter() - start
 
-        # Try to infer how many samples we explained
+        
         try:
             n_samples = len(instance)
         except TypeError:
             n_samples = 1
 
-        # Update metrics
+        
         EXPLANATIONS_TOTAL.inc()
         EXPLAINED_SAMPLES_TOTAL.inc(n_samples)
         EXPLANATION_LATENCY_SECONDS.observe(duration)
 
-        # Return as Python list (same as before)
+        
         return shap_values.values.tolist()
