@@ -241,7 +241,30 @@ Whenever a new pattern is detected (severity > 0), an **email alert** is sent au
   <img src="images/pattern_new.png" width="90%">
 </p>
 
+## OCSVM Anomaly Detection Dashboard
 
+The One-Class SVM (OCSVM) module provides a lightweight, unsupervised anomaly detector trained only on normal behavior. In streaming mode, it flags deviations from the learned normal boundary as potential attacks.
+
+The Grafana dashboard displays:
+
+- Model load time (startup latency)
+- Anomalies detected in the most recent batch
+- Model readiness / uptime status
+- Real-time anomaly counts per SWaT stage (P1–P6)
+
+<p align="center"> <img src="images/ocsvm.png" width="90%"> </p>
+
+## Kafka Producer Monitoring Dashboard
+
+This dashboard shows the behavior of the Kafka-based ICS data simulator in real time.
+
+- Top left – Tank levels (LIT101, LIT301, LIT401)
+- Top middle – Flow rates in Stage 5 (FIT501–504)
+- Most right – Kafka throughput (messages/sec)
+- Bottom left – Pump activations (P101, P102, P201, P401)
+- Bottom right – Valve status indicators (MV101, MV201, MV301)
+
+<p align="center"> <img src="images/kafka.png" width="90%"> </p>
 
 
 
