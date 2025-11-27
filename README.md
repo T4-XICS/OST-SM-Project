@@ -156,6 +156,94 @@ To run the project locally, you need to provide an InfluxDB token as an environm
 - Soma: explainability
 - Regina: Grafana, pattern mining
 
+## Grafana Visualization of SWaT Anomalies
+
+The system includes several Grafana dashboards for monitoring anomaly behavior across the six SWaT stages (P1–P6). These visualizations help operators understand *where* anomalies occur, *how strongly* they manifest, and *how they propagate* through the water-treatment pipeline.
+
+###  Stage-Level Anomaly Views
+Each dashboard snapshot includes:
+- **Stage gauges (top row):** per-stage anomaly counters (P1–P6).
+- **Heatmaps (bottom row):** sensor-level anomaly intensity over time  
+  (green = normal, red = strong anomaly).
+- **Cumulative counts:** shown on the right of each panel.
+
+Across multiple time windows, anomalies typically appear first in **P1–P2**, then propagate toward **P3–P6**, reflecting physical water flow and process coupling.
+
+<p align="center">
+  <img src="images/anomalies_with_over_time_3.png" width="90%">
+</p>
+
+---
+
+##  Anomaly Monitoring Dashboard (Model + Pipeline Health)
+
+A dedicated monitoring dashboard visualizes:
+
+- **Reconstruction-error heatmap:** per-sensor error levels over time  
+  (dark = persistent anomaly, bright = short anomaly spike).
+- **Batches processed (purple):** should increase steadily; drops indicate streaming lag.
+- **Batch-processing rate (blue):** reflects short-term throughput; sudden drops mean Spark/Kafka backpressure.
+- **Top-N anomaly sensors:** bar chart showing the sensors that contribute most anomalies in the current window.
+
+<p align="center">
+  <img src="images/dashboard_anomaly.png" width="90%">
+</p>
+
+---
+
+##  Time-Aligned Anomaly Propagation Across Stages
+
+Because water physically moves from **P1 → P6** with predictable delays, anomaly time series are aligned using fixed offsets:
+
+| Stage | Offset |
+|-------|--------|
+| P1 | 0 min |
+| P2 | -5 min |
+| P3 | -10 min |
+| P4 | -15 min |
+| P5 | -20 min |
+| P6 | -25 min |
+
+This alignment makes anomaly bursts line up across stages.  
+Consistent patterns show that anomalies **originate in P1** and then appear downstream at the expected time lags.
+
+<p align="center">
+  <img src="images/all_stages_same_time.png" width="95%">
+</p>
+
+### Example aligned views
+
+<p align="center">
+  <img src="images/P1_and_P2.png" width="45%">
+  <img src="images/P1_P2_and_P3.png" width="45%"><br>
+  <img src="images/P1_P2_P3_and_P4.png" width="45%">
+  <img src="images/P1_P2_P3__P4_and_P5.png" width="45%"><br>
+  <img src="images/P1_P2_P3__P4_P5_and_P6.png" width="45%">
+  <img src="images/all_stages.png" width="45%">
+</p>
+
+---
+
+##  Event Pattern Mining (FIT101 → LIT101 Rule)
+
+The pattern-mining module detects short, causal relationships between sensors, such as:
+
+> **FIT101 drops → and within 60 seconds LIT101 rises**
+The Grafana dashboard displays:
+- Event frequency per time window  
+- Last event severity  
+- Per-event details (timestamps, drop/rise magnitudes)
+
+A **Grafana alert rule** was also configured:  
+Whenever a new pattern is detected (severity > 0), an **email alert** is sent automatically to: `grafana.alert.dummy@gmail.com`
+
+<p align="center">
+  <img src="images/pattern_new.png" width="90%">
+</p>
+
+
+
+
 
 # Literature Review
 
