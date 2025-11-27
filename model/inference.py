@@ -4,6 +4,7 @@ import threading
 import time
 from collections import defaultdict
 import numpy as np
+import joblib
 
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType
@@ -37,6 +38,26 @@ batches_processed = Counter('ae_batches_processed_total', 'Number of Spark batch
 batch_processing_time = Histogram('ae_batch_processing_seconds', 'Processing time per batch (s)')
 model_reload_count = Counter('ae_model_reloads_total', 'Times the model was reloaded')
 model_load_duration = Gauge('ae_model_load_duration_seconds', 'Duration of last model load (s)')
+
+# OCSVM processing / metrics
+ocsvm_batches_processed = Counter('ocsvm_batches_processed_total', 'Number of batches scored by OCSVM')
+ocsvm_anomalies_in_batch = Gauge('ocsvm_anomalies_in_batch', 'Number of anomalies detected by OCSVM in batch')
+ocsvm_anomalies_by_stage = Gauge('ocsvm_anomalies_in_batch_by_stage', 'Number of anomalies detected by OCSVM in batch, by stage', ['stage'])
+ocsvm_anomaly_total = Counter('ocsvm_anomalies_total', 'Total anomalies detected by OCSVM')
+ocsvm_anomaly_total_by_stage = Counter('ocsvm_anomalies_total_by_stage', 'Cumulative OCSVM anomalies by stage', ['stage'])
+ocsvm_model_reload_count = Counter('ocsvm_model_reloads_total', 'Times the OCSVM artifacts were reloaded')
+ocsvm_model_load_duration = Gauge('ocsvm_model_load_duration_seconds', 'Duration of last OCSVM model+scaler load (s)')
+ocsvm_rows_processed = Counter('ocsvm_rows_processed_total', 'Total rows processed by OCSVM pipeline')
+ocsvm_ready = Gauge('ocsvm_ready', 'OCSVM artifacts are loaded and scoring is enabled (1=yes)')
+ocsvm_anomalies_last_batch = Gauge('ocsvm_anomalies_last_batch', 'Total anomalies detected by OCSVM in last processed batch')
+# Initialize OCSVM gauges so they always appear on /metrics even before first batch
+ocsvm_ready.set(0)
+ocsvm_anomalies_in_batch.set(0)
+ocsvm_anomalies_last_batch.set(0)
+for _st in ("P1","P2","P3","P4","P5","P6","unknown"):
+    ocsvm_anomalies_by_stage.labels(stage=_st).set(0)
+    ocsvm_anomaly_total_by_stage.labels(stage=_st).inc(0)
+ocsvm_anomaly_total.inc(0)
 
 # Reconstruction / anomaly metrics
 # per-sensor average reconstruction error (set to last observed)
@@ -112,6 +133,29 @@ current_model = None
 model_path = "/weights/lstm_vae_swat.pth"
 last_modified_time = None
 
+ocsvm_lock = threading.Lock()
+ocsvm_model = None
+ocsvm_scaler = None
+_default_ocsvm_model = "/weights/OCSVM/ocsvm_model.pkl"
+_default_ocsvm_scaler = "/weights/OCSVM/scaler.pkl"
+# also try bundled relative paths as fallbacks
+_relative_ocsvm_model = os.path.join(os.path.dirname(__file__), "OCSVM", "ocsvm_model.pkl")
+_relative_ocsvm_scaler = os.path.join(os.path.dirname(__file__), "OCSVM", "scaler.pkl")
+
+def _resolve_ocsvm_paths():
+    """Pick existing paths in priority: env -> /weights -> bundled relative."""
+    env_model = os.getenv("OCSVM_MODEL_PATH")
+    env_scaler = os.getenv("OCSVM_SCALER_PATH")
+    candidates_model = [p for p in [env_model, _default_ocsvm_model, _relative_ocsvm_model] if p]
+    candidates_scaler = [p for p in [env_scaler, _default_ocsvm_scaler, _relative_ocsvm_scaler] if p]
+
+    chosen_model = next((p for p in candidates_model if os.path.exists(p)), candidates_model[0])
+    chosen_scaler = next((p for p in candidates_scaler if os.path.exists(p)), candidates_scaler[0])
+    return chosen_model, chosen_scaler
+
+ocsvm_model_path, ocsvm_scaler_path = _resolve_ocsvm_paths()
+ocsvm_last_mtime = (None, None)
+
 def load_model_safe():
     global current_model, last_modified_time
     try:
@@ -149,12 +193,66 @@ def model_reload_worker(check_interval=60):
         time.sleep(check_interval)
         check_and_reload_model()
 
+def load_ocsvm_safe():
+    """Load OCSVM model + scaler with locking and timing."""
+    global ocsvm_model, ocsvm_scaler, ocsvm_last_mtime
+    start = time.time()
+    try:
+        model_path_candidate, scaler_path_candidate = _resolve_ocsvm_paths()
+        if not (os.path.exists(model_path_candidate) and os.path.exists(scaler_path_candidate)):
+            logger.warning(f"OCSVM artifacts missing: model={model_path_candidate}, scaler={scaler_path_candidate}")
+            ocsvm_ready.set(0)
+            return
+
+        with ocsvm_lock:
+            ocsvm_model = joblib.load(model_path_candidate)
+            ocsvm_scaler = joblib.load(scaler_path_candidate)
+            ocsvm_model_path, ocsvm_scaler_path = model_path_candidate, scaler_path_candidate
+            ocsvm_last_mtime = (os.path.getmtime(model_path_candidate), os.path.getmtime(scaler_path_candidate))
+
+        ocsvm_model_reload_count.inc()
+        duration = time.time() - start
+        ocsvm_model_load_duration.set(duration)
+        logger.info(f"OCSVM artifacts loaded in {duration:.3f}s (model={ocsvm_model_path}, scaler={ocsvm_scaler_path}, mtime={ocsvm_last_mtime})")
+        ocsvm_ready.set(1)
+    except Exception as e:
+        logger.error(f"Failed to load OCSVM artifacts: {e}")
+        ocsvm_ready.set(0)
+
+def check_and_reload_ocsvm():
+    """Reload OCSVM artifacts if either file has changed."""
+    global ocsvm_last_mtime
+    try:
+        # re-resolve paths in case env vars change between checks
+        model_path_candidate, scaler_path_candidate = _resolve_ocsvm_paths()
+        if not (os.path.exists(model_path_candidate) and os.path.exists(scaler_path_candidate)):
+            return
+
+        model_mtime = os.path.getmtime(model_path_candidate)
+        scaler_mtime = os.path.getmtime(scaler_path_candidate)
+        if ocsvm_last_mtime == (None, None) or model_mtime > ocsvm_last_mtime[0] or scaler_mtime > ocsvm_last_mtime[1]:
+            logger.info(f"OCSVM artifacts updated (model={model_path_candidate}, scaler={scaler_path_candidate}, mtime=({model_mtime},{scaler_mtime})). Reloading...")
+            load_ocsvm_safe()
+    except Exception as e:
+        logger.error(f"Error checking OCSVM files: {e}")
+
+def ocsvm_reload_worker(check_interval=60):
+    logger.info(f"OCSVM reload worker started. Check interval: {check_interval}s")
+    while True:
+        time.sleep(check_interval)
+        check_and_reload_ocsvm()
+
 load_model_safe()
+load_ocsvm_safe()
 
 # Start background thread for periodic model reloading
 reload_thread = threading.Thread(target=model_reload_worker, args=(60,), daemon=True)
 reload_thread.start()
 logger.info("Model auto-reload thread started")
+
+ocsvm_reload_thread = threading.Thread(target=ocsvm_reload_worker, args=(60,), daemon=True)
+ocsvm_reload_thread.start()
+logger.info("OCSVM auto-reload thread started")
 
 def _normalize_anomalies_output(anomalies):
     """
@@ -180,6 +278,73 @@ def _normalize_anomalies_output(anomalies):
     # Unknown type: fallback
     logger.warning(f"Unexpected anomalies type: {type(anomalies)}")
     return [], {}
+
+def run_ocsvm_pipeline(df_pre_pd, batch_id):
+    """
+    Run the OCSVM model on a pandas DataFrame (row-wise) and report metrics.
+    """
+    if df_pre_pd is None or len(df_pre_pd.index) == 0:
+        logger.info(f"Batch {batch_id}: no rows available for OCSVM scoring.")
+        ocsvm_anomalies_in_batch.set(0)
+        ocsvm_anomalies_last_batch.set(0)
+        for st in ("P1","P2","P3","P4","P5","P6","unknown"):
+            ocsvm_anomalies_by_stage.labels(stage=st).set(0)
+        return
+
+    # Always record rows and batch attempts so the metrics move even if artifacts are missing
+    rows_in_batch = len(df_pre_pd.index)
+    ocsvm_rows_processed.inc(rows_in_batch)
+    ocsvm_batches_processed.inc()
+
+    with ocsvm_lock:
+        if ocsvm_model is None or ocsvm_scaler is None:
+            logger.info(f"Batch {batch_id}: OCSVM artifacts not loaded (model={ocsvm_model_path}, scaler={ocsvm_scaler_path}); skipping OCSVM scoring.")
+            ocsvm_anomalies_in_batch.set(0)
+            ocsvm_anomalies_last_batch.set(0)
+            for st in ("P1","P2","P3","P4","P5","P6","unknown"):
+                ocsvm_anomalies_by_stage.labels(stage=st).set(0)
+            ocsvm_ready.set(0)
+            return
+        model = ocsvm_model
+        scaler = ocsvm_scaler
+
+    try:
+        features = df_pre_pd.to_numpy(dtype=np.float32)
+        scaled = scaler.transform(features)
+        preds = model.predict(scaled)
+        anomaly_rows = [int(i) for i, p in enumerate(preds) if p == -1]
+
+        ocsvm_anomalies_in_batch.set(len(anomaly_rows))
+        ocsvm_anomalies_last_batch.set(len(anomaly_rows))
+        stage_counts = defaultdict(int)
+        if anomaly_rows:
+            ocsvm_anomaly_total.inc(len(anomaly_rows))
+            for row_idx in anomaly_rows:
+                try:
+                    # pick the sensor with highest absolute z-score in the scaled vector as the "responsible" sensor
+                    max_col = int(np.argmax(np.abs(scaled[row_idx])))
+                    if 0 <= max_col < len(numeric_cols):
+                        sensor_name = numeric_cols[max_col]
+                        stage = sensor_to_stage.get(sensor_name, "unknown")
+                    else:
+                        stage = "unknown"
+                except Exception:
+                    stage = "unknown"
+
+                stage_counts[stage] += 1
+                ocsvm_anomaly_total_by_stage.labels(stage=stage).inc()
+
+        for st in ("P1","P2","P3","P4","P5","P6","unknown"):
+            ocsvm_anomalies_by_stage.labels(stage=st).set(stage_counts.get(st, 0))
+
+        logger.info(f"Batch {batch_id}: OCSVM anomalies at row indices {anomaly_rows}")
+    except Exception as e:
+        logger.exception(f"Batch {batch_id}: error during OCSVM scoring: {e}")
+        # ensure gauge is cleared on failure
+        ocsvm_anomalies_in_batch.set(0)
+        ocsvm_anomalies_last_batch.set(0)
+        for st in ("P1","P2","P3","P4","P5","P6","unknown"):
+            ocsvm_anomalies_by_stage.labels(stage=st).set(0)
 
 
 
@@ -222,13 +387,21 @@ def run_eval(batch_df, batch_id):
 
             # only then preprocess and create dataloader
             df_pre = preprocess_spark(parsed)
-            dataloader = create_dataloader(df_pre, batch_size=32, sequence_length=30)
+            # Convert once for both pipelines (pandas DataFrame)
+            df_pre_pd = df_pre.toPandas()
+            dataloader = create_dataloader(df_pre_pd, batch_size=32, sequence_length=30)
 
             if dataloader is None:
-                logger.info(f"Batch {batch_id}: not enough data to run inference yet. Skipping.")
-                return
+                logger.info(f"Batch {batch_id}: not enough data to run VAE inference yet.")
 
             df_pre.show(5, False)
+
+            # Run OCSVM pipeline (row-wise, no sequences needed)
+            run_ocsvm_pipeline(df_pre_pd, batch_id)
+
+            if dataloader is None:
+                # We still ran OCSVM; skip the VAE path for this batch.
+                return
 
             with model_lock:
                 if current_model is None:
@@ -241,7 +414,7 @@ def run_eval(batch_df, batch_id):
             anomalies_raw = evaluate_lstm(model_to_use, dataloader, device, int(os.getenv("ANOMALY_PERCENTILE", "90")))
             # Normalize anomalies output to idx list + optional errors dict
             anomalies_idx_list, anomalies_with_errors = _normalize_anomalies_output(anomalies_raw)
-            
+
 
             logger.info(f"Batch {batch_id} Evaluation result - anomalous indices: {anomalies_idx_list}")
 
